@@ -793,7 +793,7 @@ class ChillPOS {
     const setHeaderHidden = (hidden) => {
       document.body.classList.toggle('header-hidden', hidden);
       Storage.set('pos_header_hidden', hidden);
-      toggleBtn.querySelector('i').className = hidden ? 'fas fa-eye' : 'fas fa-eye-slash';
+      toggleBtn.querySelector('.pepper-icon').classList.toggle('slashed', !hidden);
       toggleBtn.title = hidden ? 'Show header' : 'Hide header';
     };
     toggleBtn.addEventListener('click', () => {

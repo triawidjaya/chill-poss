@@ -74,6 +74,19 @@ body.header-hidden .header-actions-wrap {
   height: 40px;
 }
 
+.pepper-icon { position: relative; display: inline-flex; }
+.pepper-icon.slashed::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 140%;
+  height: 2px;
+  background: currentColor;
+  transform: translate(-50%, -50%) rotate(-45deg);
+  border-radius: 1px;
+}
+
 header h1 { color: var(--primary); display: flex; align-items: center; gap: 10px; }
 
 .current-date {
