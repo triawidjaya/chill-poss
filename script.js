@@ -76,6 +76,10 @@ const Validator = {
 const DEFAULT_CATEGORIES = ['START BALANCE', 'Sales', 'Refund', 'Expense', 'Other'];
 const DEFAULT_STAFF      = ['Staff 1'];
 const DEFAULT_BRAND      = 'My Business';
+
+// Access gate — change this code to restrict who can use the app
+const APP_ACCESS_CODE    = 'chill2024';
+const STORAGE_KEY_ACCESS = 'pos_access_granted';
 // Categories required by app logic — cannot be deleted via UI
 const SYSTEM_CATEGORIES  = ['START BALANCE'];
 
@@ -283,6 +287,10 @@ class ChillPOS {
   // ============================================================
 
   async bootstrapAuth() {
+    if (!Storage.get(STORAGE_KEY_ACCESS, false)) {
+      this.showAccessGate();
+      return;
+    }
     const users = await AuthStorage.getUsers();
     if (this.isFirstRun()) {
       this.showFirstRunWizard();
@@ -299,6 +307,27 @@ class ChillPOS {
       return;
     }
     this.showLoginModal();
+  }
+
+  showAccessGate() {
+    const modal = document.getElementById('access-gate-modal');
+    const form  = document.getElementById('access-gate-form');
+    const err   = document.getElementById('access-gate-error');
+    modal.style.display = 'flex';
+    document.getElementById('access-code-input').focus();
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      const input = document.getElementById('access-code-input').value;
+      if (input === APP_ACCESS_CODE) {
+        Storage.set(STORAGE_KEY_ACCESS, true);
+        modal.style.display = 'none';
+        this.bootstrapAuth();
+      } else {
+        err.style.display = 'block';
+        document.getElementById('access-code-input').value = '';
+        document.getElementById('access-code-input').focus();
+      }
+    };
   }
 
   onLoginSuccess(user) {

@@ -93,6 +93,28 @@
 
 </div>
 
+<!-- Access Gate Modal — shown first, no close button -->
+<div class="modal" id="access-gate-modal">
+  <div class="modal-content small">
+    <h2><i class="fas fa-lock" style="color:var(--primary)"></i> Akses Terbatas</h2>
+    <p class="wizard-hint">Masukkan kode akses untuk melanjutkan.</p>
+    <form id="access-gate-form">
+      <div class="form-group">
+        <label for="access-code-input">Kode Akses</label>
+        <input type="password" id="access-code-input" autocomplete="off" required>
+        <small id="access-gate-error" style="color:var(--danger);display:none">
+          Kode salah. Coba lagi.
+        </small>
+      </div>
+      <div class="form-actions" style="grid-column:span 1">
+        <button type="submit" class="btn primary" style="width:100%;justify-content:center">
+          <i class="fas fa-unlock"></i> Masuk
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- First Run Wizard Modal — no close button, must be completed -->
 <div class="modal" id="first-run-modal">
   <div class="modal-content">
