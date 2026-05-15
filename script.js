@@ -264,15 +264,12 @@ class ChillPOS {
     this.confirmAction = null;
     this.shiftActive   = Storage.get('pos_shift_active', false);
 
-    this.filterState = { jenis: 'semua', kategori: 'semua' };
     this.sortState   = { kolom: 'tanggalWaktu', arah: 'desc' };
-    this.searchQuery = '';
 
     this.initElements();
     this.initEventListeners();
     this.initTheme();
     this.initLang();
-    this.initFilterControls();
     this.renderAll();
     // Auth bootstrap (async) — picks the right startup flow:
     //   first-run (no brand)  → wizard (creates admin + auto-login)
@@ -744,7 +741,6 @@ class ChillPOS {
     this.elements = {
       dashboard:          document.getElementById('dashboard'),
       transaksiTable:     document.getElementById('transaksi-table').querySelector('tbody'),
-      filterContainer:    document.querySelector('.filter-container'),
       newTransaksiBtn:    document.getElementById('new-transaksi'),
       downloadExcelBtn:   document.getElementById('download-excel'),
       tutupShiftBtn:      document.getElementById('tutup-shift'),
@@ -769,10 +765,6 @@ class ChillPOS {
       // Settings fields (categories handled via card UI, not a single textarea)
       settingsBrand:      document.getElementById('settings-brand'),
       settingsStaff:      document.getElementById('settings-staff'),
-      // Filter fields — initialized after filter template is rendered
-      filterJenis:    null,
-      filterKategori: null,
-      searchInput:    null,
       // Start Shift modal
       mulaiShiftModal: document.getElementById('mulai-shift-modal'),
       mulaiShiftForm:  document.getElementById('mulai-shift-form'),
@@ -1138,47 +1130,9 @@ class ChillPOS {
     this.renderCurrentDate();
     this.renderBrandName();
     this.renderDashboard();
-    this.updateFilterKategori();
     this.renderTransaksiTable();
     this.updateDownloadButton();
     if (typeof this.updateShiftUI === 'function') this.updateShiftUI();
-  }
-
-  // Render filter controls once from HTML <template>
-  initFilterControls() {
-    const tpl = document.getElementById('filter-template');
-    this.elements.filterContainer.appendChild(tpl.content.cloneNode(true));
-
-    this.elements.filterJenis    = document.getElementById('filter-jenis');
-    this.elements.filterKategori = document.getElementById('filter-kategori');
-    this.elements.searchInput    = document.getElementById('search-input');
-    this.elements.filterJenis.value = this.filterState.jenis;
-
-    document.getElementById('apply-filter').addEventListener('click', () => this.applyFilters());
-    document.getElementById('reset-filter').addEventListener('click', () => this.resetFilters());
-
-    this.elements.searchInput.addEventListener('input', () => {
-      this.searchQuery = this.elements.searchInput.value.trim().toLowerCase();
-      this.renderTransaksiTable();
-    });
-  }
-
-  // Update only the category dropdown options (called from renderAll)
-  updateFilterKategori() {
-    if (!this.elements.filterKategori) return;
-    const current    = this.elements.filterKategori.value;
-    const categories = [...new Set(this.transactions.map(tx => tx.kategori))];
-
-    this.elements.filterKategori.innerHTML = `<option value="semua">${t('filterAll')}</option>`;
-    categories.forEach(cat => {
-      const opt = document.createElement('option');
-      opt.value = cat; opt.textContent = cat;
-      if (cat === current) opt.selected = true;
-      this.elements.filterKategori.appendChild(opt);
-    });
-    if (this.filterState.kategori !== 'semua') {
-      this.elements.filterKategori.value = this.filterState.kategori;
-    }
   }
 
   renderCurrentDate() {
@@ -1215,25 +1169,8 @@ class ChillPOS {
     `;
   }
 
-  // Single source of truth for what's shown in the table.
-  // Pipeline: filterState → searchQuery → sortState
   getVisibleTransactions() {
     let txs = this.transactions;
-
-    const { jenis, kategori } = this.filterState;
-    if (jenis !== 'semua')    txs = txs.filter(tx => tx.jenis === jenis);
-    if (kategori !== 'semua') txs = txs.filter(tx => tx.kategori === kategori);
-
-    if (this.searchQuery) {
-      const q = this.searchQuery;
-      txs = txs.filter(tx =>
-        tx.deskripsi.toLowerCase().includes(q) ||
-        tx.kategori.toLowerCase().includes(q)  ||
-        tx.metode.toLowerCase().includes(q)    ||
-        tx.staff.toLowerCase().includes(q)     ||
-        (tx.keterangan || '').toLowerCase().includes(q)
-      );
-    }
 
     const { kolom, arah } = this.sortState;
     return txs.slice().sort((a, b) => {
@@ -1275,7 +1212,7 @@ class ChillPOS {
       const tr = document.createElement('tr');
       const td = document.createElement('td');
       td.colSpan = 9; td.style.textAlign = 'center';
-      td.textContent = this.searchQuery ? t('noResults', this.searchQuery) : t('noTransactionsTable');
+      td.textContent = t('noTransactionsTable');
       tr.appendChild(td);
       this.elements.transaksiTable.appendChild(tr);
       return;
@@ -1312,7 +1249,7 @@ class ChillPOS {
     if (transactions.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty-card';
-      empty.textContent = this.searchQuery ? t('noResults', this.searchQuery) : t('noTransactionsTable');
+      empty.textContent = t('noTransactionsTable');
       container.appendChild(empty);
       return;
     }
@@ -1593,21 +1530,6 @@ class ChillPOS {
       this.renderAll();
       this.showAlert(t('alertDeleted'), 'success');
     });
-  }
-
-  applyFilters() {
-    this.filterState.jenis    = this.elements.filterJenis.value;
-    this.filterState.kategori = this.elements.filterKategori.value;
-    this.renderTransaksiTable();
-  }
-
-  resetFilters() {
-    this.filterState = { jenis: 'semua', kategori: 'semua' };
-    this.searchQuery = '';
-    if (this.elements.filterJenis)    this.elements.filterJenis.value    = 'semua';
-    if (this.elements.filterKategori) this.elements.filterKategori.value = 'semua';
-    if (this.elements.searchInput)    this.elements.searchInput.value    = '';
-    this.renderTransaksiTable();
   }
 
   exportToExcel() {

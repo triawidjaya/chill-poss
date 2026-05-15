@@ -67,8 +67,6 @@
     <div class="current-date" id="current-date"></div>
   </div>
 
-  <div class="filter-container"></div>
-
   <!-- Mobile card view (auto-shown < 769px) -->
   <div class="cards-container" id="transaksi-cards"></div>
 
@@ -430,34 +428,6 @@
   </div>
 </div>
 
-<!-- Filter Template -->
-<template id="filter-template">
-  <div class="filter-group">
-    <label for="search-input" title="Search"><i class="fas fa-search"></i></label>
-    <input type="text" id="search-input" data-i18n-ph="searchPlaceholder"
-           placeholder="Description, category, staff..." style="min-width:200px">
-  </div>
-  <div class="filter-group">
-    <label for="filter-jenis" title="Type"><i class="fas fa-filter"></i></label>
-    <select id="filter-jenis">
-      <option value="semua"    data-i18n="filterAll">All</option>
-      <option value="INCOME"   data-i18n="filterIncome">Income</option>
-      <option value="OUTGOING" data-i18n="filterOutgoing">Outgoing</option>
-    </select>
-  </div>
-  <div class="filter-group">
-    <label for="filter-kategori" title="Category"><i class="fas fa-tags"></i></label>
-    <select id="filter-kategori">
-      <option value="semua" data-i18n="filterAll">All</option>
-    </select>
-  </div>
-  <button class="btn primary" id="apply-filter" title="Apply filter" data-i18n-title="applyFilter">
-    <i class="fas fa-check"></i>
-  </button>
-  <button class="btn" id="reset-filter" title="Reset" data-i18n-title="resetFilter">
-    <i class="fas fa-times"></i>
-  </button>
-</template>
 
 <div id="alert-container"></div>
 

@@ -45,7 +45,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .header-actions-wrap {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: flex-end;
   gap: 10px;
   margin-bottom: 20px;
   padding: 4px 0;
@@ -111,16 +111,6 @@ header h1 { color: var(--primary); display: flex; align-items: center; gap: 10px
 .btn:hover    { opacity: 0.9; transform: translateY(-2px); }
 .btn.small    { padding: 5px 10px; font-size: 0.8rem; }
 
-.filter-container { background: var(--card-bg); padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: var(--shadow); display: flex; flex-wrap: wrap; gap: 15px; align-items: center; border: 1px solid var(--border-color); }
-
-.filter-group { display: flex; align-items: center; gap: 8px; }
-.filter-group label { color: var(--gray); display: flex; align-items: center; font-size: 1rem; cursor: help; }
-.filter-group label i { font-size: 1rem; }
-.filter-group select,
-.filter-group input { padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 5px; min-width: 150px; background-color: var(--card-bg); color: var(--text-color); }
-/* Filter action buttons (apply/reset) — icon-only, square */
-#apply-filter, #reset-filter { padding: 8px 12px; min-width: 40px; justify-content: center; }
-#apply-filter i, #reset-filter i { margin: 0; }
 
 .table-container { background: var(--card-bg); border-radius: 8px; box-shadow: var(--shadow); overflow-x: auto; max-height: 400px; overflow-y: auto; border: 1px solid var(--border-color); font-size: 0.9rem; }
 
@@ -443,7 +433,6 @@ option { font-size: 10px; }
   .dashboard { grid-template-columns: 1fr; }
   .action-bar { flex-direction: column; }
   #new-transaksi, #download-excel, #tutup-shift { width: 100%; }
-  .filter-container { flex-direction: column; align-items: flex-start; }
   .summary-grid { grid-template-columns: 1fr; }
 }
 
