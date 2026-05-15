@@ -75,6 +75,7 @@ body.header-hidden .header-actions-wrap {
 }
 
 .pepper-icon { position: relative; display: inline-flex; }
+.pepper-icon:not(.slashed) i { color: #e53e3e; }
 .pepper-icon.slashed::after {
   content: '';
   position: absolute;
