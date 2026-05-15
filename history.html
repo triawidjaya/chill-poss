@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CHILL POS APP — Shift History</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script src="vendor/papaparse.min.js"></script>
+  <style>
+    .history-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;padding-bottom:15px;border-bottom:1px solid var(--border-color)}
+    .history-header h1{color:var(--primary);display:flex;align-items:center;gap:10px}
+    .history-header-actions{display:flex;align-items:center;gap:10px}
+    .history-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;padding:12px 16px;background:var(--card-bg);border:1px solid var(--border-color);border-radius:8px}
+    .select-all-wrap{display:flex;align-items:center;gap:6px;font-size:0.9rem;color:var(--gray);cursor:pointer;user-select:none}
+    .select-all-wrap input{cursor:pointer;width:15px;height:15px;accent-color:var(--primary)}
+    .selected-count{font-size:0.85rem;color:var(--primary);font-weight:600}
+    .toolbar-divider{width:1px;height:28px;background:var(--border-color)}
+    .empty-state{text-align:center;padding:60px 20px;color:var(--gray);background:var(--card-bg);border-radius:10px;border:1px dashed var(--border-color)}
+    .empty-state i{font-size:3rem;margin-bottom:16px;display:block;opacity:0.35}
+    .empty-state p{font-size:0.95rem;margin-top:6px;line-height:1.6}
+    .shift-list{display:flex;flex-direction:column;gap:10px}
+    .shift-card{background:var(--card-bg);border:1px solid var(--border-color);border-radius:10px;overflow:hidden;transition:box-shadow 0.2s,border-color 0.2s}
+    .shift-card:hover{box-shadow:0 4px 16px rgba(0,0,0,0.08)}
+    .shift-card.selected{border-color:var(--primary);box-shadow:0 0 0 2px rgba(67,97,238,0.18)}
+    .shift-card-header{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;user-select:none}
+    .shift-card-header:hover{background:rgba(0,0,0,0.025)}
+    .dark-theme .shift-card-header:hover{background:rgba(255,255,255,0.04)}
+    .shift-checkbox{width:16px;height:16px;cursor:pointer;flex-shrink:0;accent-color:var(--primary)}
+    .shift-card-info{flex:1;min-width:0}
+    .shift-card-date{font-weight:600;font-size:0.95rem}
+    .shift-card-meta{font-size:0.8rem;color:var(--gray);margin-top:4px;line-height:1.4}
+    .shift-card-badges{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;flex-shrink:0}
+    .shift-badge{padding:4px 10px;border-radius:20px;font-size:0.75rem;font-weight:600;white-space:nowrap}
+    .shift-badge.total{background:rgba(67,97,238,0.12);color:var(--primary)}
+    .shift-badge.income{background:#d1fae5;color:#065f46}
+    .shift-badge.out{background:#fee2e2;color:#b91c1c}
+    .shift-chevron{color:var(--gray);font-size:0.85rem;transition:transform 0.25s;flex-shrink:0}
+    .shift-card.open .shift-chevron{transform:rotate(180deg)}
+    .shift-card-detail{display:none;border-top:1px solid var(--border-color);padding:16px;animation:slideDown 0.2s ease}
+    .shift-card.open .shift-card-detail{display:block}
+    @keyframes slideDown{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+    .detail-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px}
+    .detail-saldo-item{background:rgba(0,0,0,0.04);border-radius:8px;padding:12px;text-align:center}
+    .dark-theme .detail-saldo-item{background:rgba(255,255,255,0.05)}
+    .detail-saldo-label{font-size:0.78rem;color:var(--gray);margin-bottom:5px}
+    .detail-saldo-amount{font-weight:700;font-size:0.95rem}
+    .detail-saldo-item.total-item{background:var(--primary);color:white}
+    .detail-saldo-item.total-item .detail-saldo-label{color:rgba(255,255,255,0.8)}
+    .detail-actions{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+    .detail-table-wrap{overflow-x:auto;border-radius:6px;border:1px solid var(--border-color);max-height:320px;overflow-y:auto}
+    .detail-table-wrap table{width:100%;border-collapse:collapse;font-size:0.82rem}
+    .detail-table-wrap th{background:var(--primary);color:white;padding:7px 10px;text-align:left;position:sticky;top:0;font-weight:500}
+    .detail-table-wrap td{padding:6px 10px;border-bottom:1px solid var(--border-color)}
+    .detail-table-wrap tr:last-child td{border-bottom:none}
+    .detail-table-wrap tr:hover{background:rgba(0,0,0,0.03)}
+    @media(max-width:600px){.shift-card-badges{display:none}.history-toolbar{flex-direction:column;align-items:flex-start}.history-header{flex-direction:column;align-items:flex-start;gap:12px}}
+  </style>
+</head>
+<body class="light-theme">
+<div class="container">
+
+  <div class="history-header">
+    <h1><i class="fas fa-history"></i> <span id="history-title">Shift History</span></h1>
+    <div class="history-header-actions">
+      <button class="btn theme-toggle" id="lang-toggle" title="Switch language">
+        <span id="lang-label">ID</span>
+      </button>
+      <button class="btn theme-toggle" id="theme-toggle" title="Toggle theme">
+        <i class="fas fa-moon"></i>
+      </button>
+      <button class="btn primary" id="btn-back">
+        <i class="fas fa-arrow-left"></i> <span id="btn-back-label">Back</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="history-toolbar" id="history-toolbar">
+    <label class="select-all-wrap">
+      <input type="checkbox" id="select-all"> <span id="select-all-label">Select All</span>
+    </label>
+    <span class="selected-count" id="selected-count"></span>
+    <div class="toolbar-divider"></div>
+    <button class="btn danger" id="btn-hapus-selected" disabled>
+      <i class="fas fa-trash"></i> <span id="delete-selected-label">Delete Selected</span>
+    </button>
+  </div>
+  <script>
+    // Hide toolbar (delete actions) and per-card checkboxes for non-admins
+    if (!window._isAdmin) {
+      document.getElementById('history-toolbar').style.display = 'none';
+      const s = document.createElement('style');
+      s.textContent = '.shift-checkbox{display:none}';
+      document.head.appendChild(s);
+    }
+  </script>
+
+  <!-- Date range filter -->
+  <div class="filter-container" id="hist-filter">
+    <div class="filter-group date-presets">
+      <label><i class="fas fa-calendar-alt"></i> <span id="hist-date-label">Date</span>:</label>
+      <button type="button" class="btn small date-preset active" data-preset="all">All</button>
+      <button type="button" class="btn small date-preset"        data-preset="today">Today</button>
+      <button type="button" class="btn small date-preset"        data-preset="week">This Week</button>
+      <button type="button" class="btn small date-preset"        data-preset="month">This Month</button>
+      <button type="button" class="btn small date-preset"        data-preset="custom">Custom...</button>
+    </div>
+    <div class="filter-group date-custom" id="date-custom-group" style="display:none">
+      <input type="date" id="date-from" title="From">
+      <span>&ndash;</span>
+      <input type="date" id="date-to" title="To">
+    </div>
+  </div>
+
+  <!-- Income vs Outgoing chart (per shift) -->
+  <div class="chart-container" id="chart-container"></div>
+
+  <div class="shift-list" id="shift-list"></div>
+
+</div>
+<div id="alert-container"></div>
+
+<!-- lang.js must load before this script -->
+<script src="lang.js"></script>
+<script>
+// ── Storage (same as main app) ──
+const HistStorage = {
+  get(key, fallback = null) {
+    try { const r = localStorage.getItem(key); return r === null ? fallback : JSON.parse(r); }
+    catch { return fallback; }
+  },
+  set(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); return true; }
+    catch { return false; }
+  }
+};
+
+// ── Auth check — redirect to index.html if no session ──
+// History page reuses session set by index.html; if no users yet or no session, bounce home.
+(function authGuard() {
+  const users   = HistStorage.get('pos_users', []);
+  const session = HistStorage.get('pos_session', null);
+  if (users.length === 0 || !session) {
+    window.location.replace('index.html');
+    return;
+  }
+  const user = users.find(u => u.id === session.userId);
+  if (!user) {
+    HistStorage.set('pos_session', null);
+    window.location.replace('index.html');
+    return;
+  }
+  // Expose role check for guarding delete UI below
+  window._currentUser = user;
+  window._isAdmin     = user.role === 'admin';
+})();
+
+// ── Utilities ──
+const fmt = (n) => new Intl.NumberFormat('id-ID', { style:'currency', currency:'IDR', minimumFractionDigits:0 }).format(n);
+
+function escapeHtml(str) {
+  return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+
+function fmtDate(iso) {
+  const lang = LangManager.current === 'id' ? 'id-ID' : 'en-US';
+  return new Date(iso).toLocaleString(lang, { weekday:'long', year:'numeric', month:'long', day:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
+// ── Theme ──
+function initTheme() {
+  const saved = HistStorage.get('theme') || 'light';
+  document.body.className = `${saved}-theme`;
+  document.getElementById('theme-toggle').querySelector('i').className = saved === 'light' ? 'fas fa-moon' : 'fas fa-sun';
+}
+
+document.getElementById('theme-toggle').addEventListener('click', () => {
+  const isDark = document.body.classList.contains('dark-theme');
+  const next   = isDark ? 'light' : 'dark';
+  document.body.className = `${next}-theme`;
+  HistStorage.set('theme', next);
+  document.getElementById('theme-toggle').querySelector('i').className = next === 'light' ? 'fas fa-moon' : 'fas fa-sun';
+});
+
+// ── Language ──
+function applyLang() {
+  const lang = LangManager.current;
+  document.documentElement.lang = lang;
+  document.getElementById('lang-label').textContent       = lang === 'en' ? 'ID' : 'EN';
+  document.getElementById('history-title').textContent    = t('historyTitle');
+  document.getElementById('btn-back-label').textContent   = t('back');
+  document.getElementById('select-all-label').textContent = t('selectAll');
+  document.getElementById('delete-selected-label').textContent = t('deleteSelected');
+  // Date filter labels
+  document.getElementById('hist-date-label').textContent = t('dateRange');
+  const presetMap = { all: 'dateAll', today: 'dateToday', week: 'dateWeek', month: 'dateMonth', custom: 'dateCustom' };
+  document.querySelectorAll('.date-preset').forEach(b => {
+    b.textContent = t(presetMap[b.dataset.preset]);
+  });
+  renderList();   // re-render with new language
+  renderChart();  // chart labels are translated
+}
+
+document.getElementById('lang-toggle').addEventListener('click', () => {
+  LangManager.toggle();
+  applyLang();
+});
+
+// ── Navigation ──
+document.getElementById('btn-back').addEventListener('click', () => window.location.href = 'index.html');
+
+// ── Alert ──
+function showAlert(message, type = 'info') {
+  const div = document.createElement('div');
+  div.className = `alert ${type}`;
+  const p = document.createElement('p'); p.textContent = message;
+  const x = document.createElement('span'); x.className = 'close-alert'; x.textContent = '×';
+  div.appendChild(p); div.appendChild(x);
+  document.getElementById('alert-container').appendChild(div);
+  setTimeout(() => div.classList.add('show'), 10);
+  const hide = () => { div.classList.remove('show'); setTimeout(() => div.remove(), 300); };
+  setTimeout(hide, 5000);
+  x.addEventListener('click', hide);
+}
+
+// ── State ──
+let history  = HistStorage.get('pos_shift_history', []);
+let selectedIds = new Set();
+let dateFilter  = { preset: 'all', from: null, to: null };
+
+// ── Date filter helpers ──
+function dateBounds() {
+  const { preset, from, to } = dateFilter;
+  if (preset === 'all') return null;
+  const now = new Date();
+  const startOfDay = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x.getTime(); };
+  const endOfDay   = (d) => { const x = new Date(d); x.setHours(23,59,59,999); return x.getTime(); };
+  if (preset === 'today') return [startOfDay(now), endOfDay(now)];
+  if (preset === 'week') {
+    const d = new Date(now);
+    const dow = d.getDay();
+    d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow)); // Monday as start
+    return [startOfDay(d), endOfDay(now)];
+  }
+  if (preset === 'month') {
+    const d = new Date(now.getFullYear(), now.getMonth(), 1);
+    return [startOfDay(d), endOfDay(now)];
+  }
+  if (preset === 'custom' && from && to) {
+    return [startOfDay(new Date(from)), endOfDay(new Date(to))];
+  }
+  return null;
+}
+
+function getFilteredShifts() {
+  const range = dateBounds();
+  if (!range) return history;
+  const [from, to] = range;
+  return history.filter(s => {
+    const t = new Date(s.closedAt).getTime();
+    return t >= from && t <= to;
+  });
+}
+
+// ── Chart: 1 bar per shift (closedAt × income/outgoing) ──
+function renderChart() {
+  const c = document.getElementById('chart-container');
+  if (!c) return;
+  const shifts = getFilteredShifts().slice().reverse(); // oldest → newest left to right
+  if (shifts.length === 0) {
+    c.innerHTML = `
+      <div class="chart-header">
+        <h3><i class="fas fa-chart-bar"></i> ${t('chartTitle')}</h3>
+      </div>
+      <div class="chart-empty">${t('chartNoData')}</div>`;
+    return;
+  }
+  const max = Math.max(1, ...shifts.flatMap(s => [
+    s.summary?.totalIncome || 0,
+    Math.abs(s.summary?.totalOutgoing || 0),
+  ]));
+  const bars = shifts.map(s => {
+    const income   = s.summary?.totalIncome || 0;
+    const outgoing = Math.abs(s.summary?.totalOutgoing || 0);
+    const inH  = (income   / max) * 100;
+    const outH = (outgoing / max) * 100;
+    const d    = new Date(s.closedAt);
+    const label = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+    return `
+      <div class="chart-col">
+        <div class="chart-bars">
+          <div class="chart-bar bar-in"  style="height:${inH}%"  title="${t('chartIncome')}: ${fmt(income)}"></div>
+          <div class="chart-bar bar-out" style="height:${outH}%" title="${t('chartOutgoing')}: ${fmt(outgoing)}"></div>
+        </div>
+        <div class="chart-label">${escapeHtml(label)}</div>
+      </div>`;
+  }).join('');
+  c.innerHTML = `
+    <div class="chart-header">
+      <h3><i class="fas fa-chart-bar"></i> ${t('chartTitle')}</h3>
+      <div class="chart-legend">
+        <span class="legend-item"><span class="legend-dot bar-in"></span> ${t('chartIncome')}</span>
+        <span class="legend-item"><span class="legend-dot bar-out"></span> ${t('chartOutgoing')}</span>
+      </div>
+    </div>
+    <div class="chart-bars-wrap">${bars}</div>`;
+}
+
+// ── Render ──
+function renderList() {
+  const list = document.getElementById('shift-list');
+  list.innerHTML = '';
+  const visible = getFilteredShifts();
+
+  if (visible.length === 0) {
+    const isFiltered = dateFilter.preset !== 'all';
+    list.innerHTML = `
+      <div class="empty-state">
+        <i class="fas fa-box-open"></i>
+        <p>${isFiltered ? t('noResultsRange') : t('noHistory')}</p>
+        <p>${isFiltered ? '' : t('noHistoryHint')}</p>
+      </div>`;
+    updateToolbar();
+    return;
+  }
+
+  visible.forEach(shift => {
+    const card      = document.createElement('div');
+    card.className  = 'shift-card' + (selectedIds.has(shift.id) ? ' selected' : '');
+    card.dataset.id = shift.id;
+
+    const staffStr = shift.staff?.join(', ') || '-';
+    const txCount  = shift.transactions?.length || 0;
+    const income   = shift.summary?.totalIncome   || 0;
+    const outgoing = Math.abs(shift.summary?.totalOutgoing || 0);
+
+    card.innerHTML = `
+      <div class="shift-card-header">
+        <input type="checkbox" class="shift-checkbox" data-id="${shift.id}" ${selectedIds.has(shift.id) ? 'checked' : ''}>
+        <div class="shift-card-info">
+          <div class="shift-card-date">${fmtDate(shift.closedAt)}</div>
+          <div class="shift-card-meta">
+            <i class="fas fa-user"></i> ${escapeHtml(staffStr)} &nbsp;·&nbsp;
+            <i class="fas fa-receipt"></i> ${txCount} ${t('transactions')}
+          </div>
+        </div>
+        <div class="shift-card-badges">
+          <span class="shift-badge income">+${fmt(income)}</span>
+          <span class="shift-badge out">-${fmt(outgoing)}</span>
+          <span class="shift-badge total">${fmt(shift.summary?.total || 0)}</span>
+        </div>
+        <i class="fas fa-chevron-down shift-chevron"></i>
+      </div>
+      <div class="shift-card-detail">${renderDetail(shift)}</div>
+    `;
+
+    card.querySelector('.shift-card-header').addEventListener('click', (e) => {
+      if (e.target.classList.contains('shift-checkbox')) return;
+      card.classList.toggle('open');
+    });
+
+    card.querySelector('.shift-checkbox').addEventListener('change', (e) => {
+      e.stopPropagation();
+      if (e.target.checked) selectedIds.add(shift.id);
+      else selectedIds.delete(shift.id);
+      card.classList.toggle('selected', e.target.checked);
+      updateToolbar();
+    });
+
+    card.querySelector('.btn-export-excel')?.addEventListener('click', () => exportShift(shift, 'excel'));
+    card.querySelector('.btn-export-csv')?.addEventListener('click',   () => exportShift(shift, 'csv'));
+
+    list.appendChild(card);
+  });
+
+  updateToolbar();
+}
+
+function renderDetail(shift) {
+  const s = shift.summary || {};
+
+  const fmtDiff = (val) => {
+    if (val === null || val === undefined) return `<span style="color:var(--gray)">—</span>`;
+    if (val === 0) return `<span style="color:#007b46;font-weight:600">${t('exact')}</span>`;
+    const sign  = val > 0 ? '+' : '';
+    const color = val > 0 ? '#17a2b8' : '#f72585';
+    const label = val > 0 ? t('over') : t('short');
+    return `<span style="color:${color};font-weight:600">${sign}${fmt(val)} ${label}</span>`;
+  };
+
+  const hasActual = s.actualCash !== null && s.actualCash !== undefined;
+
+  const actualSection = hasActual ? `
+    <table style="width:100%;border-collapse:collapse;font-size:0.85rem;margin-bottom:16px">
+      <thead>
+        <tr>
+          <th style="background:var(--primary);color:white;padding:7px 10px;text-align:left">${t('method')}</th>
+          <th style="background:var(--primary);color:white;padding:7px 10px;text-align:right">${t('expected')}</th>
+          <th style="background:var(--primary);color:white;padding:7px 10px;text-align:right">${t('actual')}</th>
+          <th style="background:var(--primary);color:white;padding:7px 10px;text-align:right">${t('difference')}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid var(--border-color)">
+          <td style="padding:7px 10px">💵 Cash</td>
+          <td style="padding:7px 10px;text-align:right">${fmt(s.cash||0)}</td>
+          <td style="padding:7px 10px;text-align:right;font-weight:600">${fmt(s.actualCash)}</td>
+          <td style="padding:7px 10px;text-align:right">${fmtDiff(s.selisihCash)}</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px">💳 Card</td>
+          <td style="padding:7px 10px;text-align:right">${fmt(s.card||0)}</td>
+          <td style="padding:7px 10px;text-align:right;font-weight:600">${fmt(s.actualCard)}</td>
+          <td style="padding:7px 10px;text-align:right">${fmtDiff(s.selisihCard)}</td>
+        </tr>
+      </tbody>
+    </table>` : '';
+
+  const rows = (shift.transactions || []).map(tx => {
+    const isIncome = tx.jenis === 'INCOME';
+    return `
+      <tr>
+        <td>${escapeHtml(new Date(tx.tanggalWaktu).toLocaleString(LangManager.current === 'id' ? 'id-ID' : 'en-US'))}</td>
+        <td><span class="${isIncome ? 'income-badge' : 'outgoing-badge'}">${escapeHtml(tx.jenis)}</span></td>
+        <td>${escapeHtml(tx.kategori)}</td>
+        <td>${escapeHtml(tx.deskripsi)}</td>
+        <td style="color:${isIncome ? 'var(--success)' : 'var(--danger)'};font-weight:500">
+          ${isIncome ? '+' : '-'} ${fmt(Math.abs(tx.jumlah))}
+        </td>
+        <td>${escapeHtml(tx.metode)}</td>
+        <td>${escapeHtml(tx.keterangan || '-')}</td>
+        <td>${escapeHtml(tx.staff)}</td>
+      </tr>`;
+  }).join('');
+
+  return `
+    <div class="detail-summary">
+      <div class="detail-saldo-item">
+        <div class="detail-saldo-label">${t('cashExpected')}</div>
+        <div class="detail-saldo-amount">${fmt(s.cash||0)}</div>
+      </div>
+      <div class="detail-saldo-item">
+        <div class="detail-saldo-label">${t('cardExpected')}</div>
+        <div class="detail-saldo-amount">${fmt(s.card||0)}</div>
+      </div>
+      <div class="detail-saldo-item">
+        <div class="detail-saldo-label">Other</div>
+        <div class="detail-saldo-amount">${fmt(s.other||0)}</div>
+      </div>
+      <div class="detail-saldo-item total-item">
+        <div class="detail-saldo-label">${t('totalSaldo')}</div>
+        <div class="detail-saldo-amount">${fmt(s.total||0)}</div>
+      </div>
+    </div>
+    ${actualSection}
+    <div class="detail-actions">
+      <button class="btn success btn-export-excel">
+        <i class="fas fa-file-excel"></i> ${t('exportExcelBtn')}
+      </button>
+      <button class="btn info btn-export-csv">
+        <i class="fas fa-file-csv"></i> ${t('exportCsvBtn')}
+      </button>
+    </div>
+    <div class="detail-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Date/Time</th><th>Type</th><th>Category</th><th>Description</th>
+            <th>Amount</th><th>Method</th><th>Note</th><th>Staff</th>
+          </tr>
+        </thead>
+        <tbody>${rows || `<tr><td colspan="8" style="text-align:center">${t('noTransactions')}</td></tr>`}</tbody>
+      </table>
+    </div>`;
+}
+
+// ── Toolbar ──
+function updateToolbar() {
+  const count   = selectedIds.size;
+  const countEl = document.getElementById('selected-count');
+  countEl.textContent = count > 0 ? `${count} ${t('transactions')} selected` : '';
+  document.getElementById('btn-hapus-selected').disabled = count === 0;
+
+  const sa = document.getElementById('select-all');
+  if (history.length === 0 || count === 0) { sa.checked = false; sa.indeterminate = false; }
+  else if (count === history.length)        { sa.checked = true;  sa.indeterminate = false; }
+  else                                      { sa.checked = false; sa.indeterminate = true;  }
+}
+
+document.getElementById('select-all').addEventListener('change', (e) => {
+  if (e.target.checked) history.forEach(s => selectedIds.add(s.id));
+  else selectedIds.clear();
+  renderList();
+});
+
+document.getElementById('btn-hapus-selected').addEventListener('click', () => {
+  if (selectedIds.size === 0) return;
+  if (!confirm(t('alertDeleteShift', selectedIds.size))) return;
+  history = history.filter(s => !selectedIds.has(s.id));
+  selectedIds.clear();
+  HistStorage.set('pos_shift_history', history);
+  renderList();
+  renderChart();
+  showAlert(t('alertShiftsDeleted'), 'success');
+});
+
+// ── Export ──
+function sanitizeForExcel(value) {
+  const str = String(value ?? '');
+  return /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+}
+
+function exportShift(shift, format) {
+  const rows = (shift.transactions || []).map(tx => ({
+    'Date/Time':   sanitizeForExcel(new Date(tx.tanggalWaktu).toLocaleString()),
+    'Type':        sanitizeForExcel(tx.jenis),
+    'Category':    sanitizeForExcel(tx.kategori),
+    'Description': sanitizeForExcel(tx.deskripsi),
+    'Amount':      tx.jenis === 'INCOME' ? tx.jumlah : -Math.abs(tx.jumlah),
+    'Method':      sanitizeForExcel(tx.metode),
+    'Note':        sanitizeForExcel(tx.keterangan || ''),
+    'Staff':       sanitizeForExcel(tx.staff)
+  }));
+
+  const dateStr  = new Date(shift.closedAt).toISOString().split('T')[0];
+  const fileName = `shift_${dateStr}`;
+
+  if (format === 'excel') {
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Transactions');
+    XLSX.writeFile(wb, `${fileName}.xlsx`);
+    showAlert(t('alertExcelOk'), 'success');
+  } else {
+    const csv  = Papa.unparse(rows);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${fileName}.csv`;
+    link.click();
+  }
+}
+
+// ── Date filter wiring ──
+function setDatePreset(preset) {
+  dateFilter.preset = preset;
+  document.querySelectorAll('.date-preset').forEach(b => {
+    b.classList.toggle('active', b.dataset.preset === preset);
+  });
+  document.getElementById('date-custom-group').style.display = preset === 'custom' ? '' : 'none';
+  if (preset !== 'custom') {
+    renderChart();
+    renderList();
+  } else if (dateFilter.from && dateFilter.to) {
+    renderChart();
+    renderList();
+  }
+}
+
+document.querySelectorAll('.date-preset').forEach(btn => {
+  btn.addEventListener('click', () => setDatePreset(btn.dataset.preset));
+});
+document.getElementById('date-from').addEventListener('change', (e) => {
+  dateFilter.from = e.target.value;
+  if (dateFilter.to) { renderChart(); renderList(); }
+});
+document.getElementById('date-to').addEventListener('change', (e) => {
+  dateFilter.to = e.target.value;
+  if (dateFilter.from) { renderChart(); renderList(); }
+});
+
+// ── Init ──
+initTheme();
+applyLang();
+renderChart();
+</script>
+</body>
+</html>

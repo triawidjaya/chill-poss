@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CHILL POS APP</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
+</head>
+<body class="light-theme">
+
+<div class="container">
+
+  <header>
+    <h1><i class="fas fa-store"></i> <span id="brand-name">My Business</span></h1>
+    <button class="btn theme-toggle" id="toggle-header" title="Toggle header visibility" aria-label="Toggle header">
+      <i class="fas fa-eye-slash"></i>
+    </button>
+    <div id="user-menu-popup" class="user-menu-popup" style="display:none">
+      <div class="user-menu-info">
+        <div data-i18n="loggedInAs">Signed in as</div>
+        <div id="user-menu-name" class="user-menu-name"></div>
+        <div id="user-menu-role" class="user-menu-role"></div>
+      </div>
+      <button class="btn danger" id="logout-btn" style="width:100%;justify-content:center;margin-top:10px">
+        <i class="fas fa-sign-out-alt"></i> <span data-i18n="logout">Sign Out</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Menu row: header-actions (collapses when eye icon in header is clicked) -->
+  <div class="header-actions-wrap">
+    <div class="header-actions">
+      <button class="btn theme-toggle" id="open-help" title="Help / Quick Start">
+        <i class="fas fa-question"></i>
+      </button>
+      <button class="btn theme-toggle" id="open-settings" title="Settings">
+        <i class="fas fa-cog"></i>
+      </button>
+      <button class="btn theme-toggle" id="btn-histori" title="Shift History">
+        <i class="fas fa-history"></i>
+      </button>
+      <button class="btn theme-toggle" id="lang-toggle" title="Switch language">
+        <span id="lang-label">ID</span>
+      </button>
+      <button class="btn theme-toggle" id="theme-toggle">
+        <i class="fas fa-moon"></i>
+      </button>
+      <button class="btn theme-toggle" id="user-menu" title="Account" style="display:none;width:auto;padding:0 12px;gap:6px">
+        <i class="fas fa-user"></i> <span id="user-label"></span>
+      </button>
+    </div>
+  </div>
+
+  <div class="dashboard" id="dashboard"></div>
+
+  <div class="action-bar">
+    <button class="btn primary" id="new-transaksi">
+      <i class="fas fa-plus"></i> <span data-i18n="newTransaction">New Transaction</span>
+    </button>
+    <button class="btn success" id="download-excel" disabled>
+      <i class="fas fa-file-excel"></i> <span data-i18n="exportExcel">Export Excel</span>
+    </button>
+    <button class="btn danger" id="tutup-shift">
+      <i class="fas fa-door-closed"></i> <span data-i18n="closeShift">Close Shift</span>
+    </button>
+    <div class="current-date" id="current-date"></div>
+  </div>
+
+  <div class="filter-container"></div>
+
+  <!-- Mobile card view (auto-shown < 769px) -->
+  <div class="cards-container" id="transaksi-cards"></div>
+
+  <div class="table-container">
+    <table id="transaksi-table">
+      <thead>
+        <tr>
+          <th data-kolom="tanggalWaktu" style="cursor:pointer"><span data-i18n="colDateTime">Date/Time</span> <i class="sort-icon fas fa-sort-down"></i></th>
+          <th data-kolom="jenis"        style="cursor:pointer"><span data-i18n="colType">Type</span> <i class="sort-icon fas fa-sort"></i></th>
+          <th data-kolom="kategori"     style="cursor:pointer"><span data-i18n="colCategory">Category</span> <i class="sort-icon fas fa-sort"></i></th>
+          <th data-kolom="deskripsi"    style="cursor:pointer"><span data-i18n="colDescription">Description</span> <i class="sort-icon fas fa-sort"></i></th>
+          <th data-kolom="jumlah"       style="cursor:pointer"><span data-i18n="colAmount">Amount</span> <i class="sort-icon fas fa-sort"></i></th>
+          <th data-kolom="metode"       style="cursor:pointer"><span data-i18n="colMethod">Method</span> <i class="sort-icon fas fa-sort"></i></th>
+          <th><span data-i18n="colNote">Note</span></th>
+          <th data-kolom="staff"        style="cursor:pointer"><span data-i18n="colStaff">Staff</span> <i class="sort-icon fas fa-sort"></i></th>
+          <th><span data-i18n="colAction">Action</span></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+</div>
+
+<!-- First Run Wizard Modal — no close button, must be completed -->
+<div class="modal" id="first-run-modal">
+  <div class="modal-content">
+    <h2><i class="fas fa-rocket" style="color:var(--primary)"></i>
+        <span data-i18n="welcomeTitle">Welcome! Let's set up your POS</span></h2>
+    <p class="wizard-hint" data-i18n="welcomeHint">
+      Customize the basics now — you can change them anytime in Settings.
+    </p>
+    <form id="first-run-form">
+      <div class="form-group">
+        <label for="fr-brand" data-i18n="brandName">Brand Name</label>
+        <input type="text" id="fr-brand" maxlength="50" required placeholder="e.g. Warung Pak Budi">
+      </div>
+      <div class="form-group">
+        <label for="fr-categories" data-i18n="categoriesPerLine">Categories (one per line)</label>
+        <textarea id="fr-categories" required></textarea>
+      </div>
+      <div class="form-group">
+        <label for="fr-staff" data-i18n="staffPerLine">Staff (one per line)</label>
+        <textarea id="fr-staff" required></textarea>
+      </div>
+      <div class="form-group">
+        <label for="fr-admin-name" data-i18n="adminUser">Admin User (from staff list above)</label>
+        <select id="fr-admin-name" required></select>
+      </div>
+      <div class="form-group">
+        <label for="fr-admin-pin" data-i18n="adminPin">Admin PIN (4-6 digits)</label>
+        <input type="password" id="fr-admin-pin" inputmode="numeric" pattern="[0-9]{4,6}"
+               maxlength="6" minlength="4" required autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label for="fr-admin-pin2" data-i18n="confirmPin">Confirm PIN</label>
+        <input type="password" id="fr-admin-pin2" inputmode="numeric" pattern="[0-9]{4,6}"
+               maxlength="6" minlength="4" required autocomplete="new-password">
+      </div>
+      <div class="form-actions" style="grid-column:span 1">
+        <button type="submit" class="btn primary" style="width:100%;justify-content:center">
+          <i class="fas fa-check"></i> <span data-i18n="finishSetup">Finish Setup</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Setup Admin Modal — for existing-data installs without users yet -->
+<div class="modal" id="setup-admin-modal">
+  <div class="modal-content small">
+    <h2><i class="fas fa-user-shield" style="color:var(--primary)"></i>
+        <span data-i18n="setupAdminTitle">Set Up Admin Account</span></h2>
+    <p class="wizard-hint" data-i18n="setupAdminHint">
+      Existing data found. Please choose an admin user and set a PIN to continue.
+    </p>
+    <form id="setup-admin-form">
+      <div class="form-group">
+        <label for="sa-admin-name" data-i18n="adminUser">Admin User</label>
+        <select id="sa-admin-name" required></select>
+      </div>
+      <div class="form-group">
+        <label for="sa-admin-pin" data-i18n="adminPin">Admin PIN (4-6 digits)</label>
+        <input type="password" id="sa-admin-pin" inputmode="numeric" pattern="[0-9]{4,6}"
+               maxlength="6" minlength="4" required autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label for="sa-admin-pin2" data-i18n="confirmPin">Confirm PIN</label>
+        <input type="password" id="sa-admin-pin2" inputmode="numeric" pattern="[0-9]{4,6}"
+               maxlength="6" minlength="4" required autocomplete="new-password">
+      </div>
+      <div class="form-actions" style="grid-column:span 1">
+        <button type="submit" class="btn primary" style="width:100%;justify-content:center">
+          <i class="fas fa-check"></i> <span data-i18n="finishSetup">Finish Setup</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Login Modal -->
+<div class="modal" id="login-modal">
+  <div class="modal-content small">
+    <h2><i class="fas fa-user-lock" style="color:var(--primary)"></i>
+        <span data-i18n="loginTitle">Sign In</span></h2>
+    <form id="login-form">
+      <div class="form-group">
+        <label for="login-user" data-i18n="selectUser">Select User</label>
+        <select id="login-user" required></select>
+      </div>
+      <div class="form-group" id="login-pin-group">
+        <label for="login-pin" data-i18n="enterPin">Enter PIN</label>
+        <input type="password" id="login-pin" inputmode="numeric" pattern="[0-9]{4,6}"
+               maxlength="6" autocomplete="current-password">
+      </div>
+      <div class="form-actions" style="grid-column:span 1">
+        <button type="submit" class="btn primary" style="width:100%;justify-content:center">
+          <i class="fas fa-sign-in-alt"></i> <span data-i18n="signIn">Sign In</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Users Management Modal (admin only) -->
+<div class="modal" id="users-modal">
+  <div class="modal-content">
+    <span class="close-btn" id="close-users">&times;</span>
+    <h2 data-i18n="usersTitle">Manage Users</h2>
+    <div id="users-list" class="users-list" style="margin-top:15px"></div>
+    <hr style="margin:18px 0;border:0;border-top:1px solid var(--border-color)">
+    <h3 style="font-size:1rem;margin-bottom:10px;color:var(--gray)" data-i18n="addUser">Add User</h3>
+    <form id="add-user-form" class="add-user-form">
+      <div class="form-group">
+        <label for="new-username" data-i18n="username">Username</label>
+        <input type="text" id="new-username" maxlength="30" required>
+      </div>
+      <div class="form-group">
+        <label for="new-user-role" data-i18n="role">Role</label>
+        <select id="new-user-role">
+          <option value="cashier" data-i18n="roleCashier">Cashier</option>
+          <option value="admin" data-i18n="roleAdmin">Admin</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="new-user-pin" data-i18n="pin">PIN (optional)</label>
+        <input type="password" id="new-user-pin" inputmode="numeric" pattern="[0-9]{4,6}"
+               maxlength="6" autocomplete="new-password">
+      </div>
+      <div class="form-actions" style="grid-column:span 1">
+        <button type="submit" class="btn primary" style="width:100%;justify-content:center">
+          <i class="fas fa-plus"></i> <span data-i18n="addUser">Add User</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Start Shift Modal -->
+<div class="modal" id="mulai-shift-modal">
+  <div class="modal-content small">
+    <h2 style="margin-bottom:20px"><i class="fas fa-play-circle" style="color:var(--success)"></i> <span data-i18n="startShift">Start Shift</span></h2>
+    <form id="mulai-shift-form">
+      <div class="form-group">
+        <label for="ms-staff" data-i18n="staffOnDuty">Staff on Duty</label>
+        <select id="ms-staff" required></select>
+      </div>
+      <div class="form-group">
+        <label for="ms-cash" data-i18n="initialCashBalance">Initial Cash Balance</label>
+        <input type="text" id="ms-cash" inputmode="numeric" autocomplete="off" placeholder="0" required>
+        <small id="ms-cash-preview" style="color:var(--gray);font-size:0.8rem;margin-top:4px;display:block"></small>
+      </div>
+      <div class="form-actions" style="grid-column:span 1">
+        <button type="submit" class="btn success" style="width:100%;justify-content:center">
+          <i class="fas fa-play"></i> <span data-i18n="startShiftBtn">Start Shift</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Transaction Form Modal -->
+<div class="modal" id="form-modal">
+  <div class="modal-content">
+    <span class="close-btn" id="close-form">&times;</span>
+    <h2 id="modal-title" data-i18n="newTransactionTitle">New Transaction</h2>
+    <form id="transaksi-form">
+      <div class="form-group">
+        <label data-i18n="transactionType">Transaction Type</label>
+        <div class="type-toggle">
+          <button type="button" class="type-btn income active" data-type="income">
+            <i class="fas fa-arrow-down"></i> <span data-i18n="income">Income</span>
+          </button>
+          <button type="button" class="type-btn outgoing" data-type="outgoing">
+            <i class="fas fa-arrow-up"></i> <span data-i18n="outgoing">Outgoing</span>
+          </button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="f-kategori" data-i18n="category">Category</label>
+        <select id="f-kategori" required></select>
+      </div>
+      <div class="form-group">
+        <label for="f-metode" data-i18n="paymentMethod">Payment Method</label>
+        <select id="f-metode" required>
+          <option value="Cash">Cash</option>
+          <option value="Card">Card</option>
+          <option value="Transfer">Transfer</option>
+          <option value="Qris">Qris</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="f-staff" data-i18n="staff">Staff</label>
+        <select id="f-staff" required></select>
+      </div>
+      <div class="form-group full-width">
+        <label for="f-deskripsi" data-i18n="description">Description</label>
+        <input type="text" id="f-deskripsi" maxlength="300" required>
+      </div>
+      <div class="form-group">
+        <label for="f-jumlah" data-i18n="amount">Amount</label>
+        <input type="text" id="f-jumlah" inputmode="numeric" autocomplete="off" placeholder="0">
+        <small id="f-jumlah-preview" style="color:var(--gray);font-size:0.8rem;margin-top:4px;display:block"></small>
+      </div>
+      <div class="form-group">
+        <label for="f-keterangan" data-i18n="note">Note (Optional)</label>
+        <input type="text" id="f-keterangan" maxlength="100">
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn" id="form-batal">
+          <i class="fas fa-times"></i> <span data-i18n="cancel">Cancel</span>
+        </button>
+        <button type="submit" class="btn primary">
+          <i class="fas fa-save"></i> <span data-i18n="save">Save</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Confirm Modal -->
+<div class="modal" id="confirm-modal">
+  <div class="modal-content small">
+    <div id="confirm-message">Are you sure?</div>
+    <div class="confirm-buttons" style="margin-top:15px;display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn" id="confirm-cancel" data-i18n="cancel">Cancel</button>
+      <button class="btn danger" id="confirm-ok" data-i18n="yes">Yes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Close Shift Modal -->
+<div class="modal" id="tutup-shift-modal">
+  <div class="modal-content" style="max-width:520px;width:100%">
+    <h2 style="margin-bottom:20px">
+      <i class="fas fa-door-closed" style="color:var(--danger)"></i>
+      <span data-i18n="closeShiftTitle">Close Shift</span>
+    </h2>
+    <div id="ts-step-input">
+      <p style="color:var(--gray);font-size:0.9rem;margin-bottom:16px" data-i18n="closeShiftHint">
+        Enter the actual physical cash count.
+      </p>
+      <div class="form-group">
+        <label for="ts-actual-cash" data-i18n="actualCash">Actual Cash</label>
+        <input type="text" id="ts-actual-cash" inputmode="numeric" autocomplete="off" placeholder="0">
+        <small id="ts-actual-cash-preview" style="color:var(--gray);font-size:0.8rem;margin-top:4px;display:block"></small>
+      </div>
+      <div class="form-group">
+        <label for="ts-actual-card" data-i18n="actualCard">Actual Card</label>
+        <input type="text" id="ts-actual-card" inputmode="numeric" autocomplete="off" placeholder="0">
+        <small id="ts-actual-card-preview" style="color:var(--gray);font-size:0.8rem;margin-top:4px;display:block"></small>
+      </div>
+      <div class="form-actions" style="grid-column:span 1;margin-top:8px">
+        <button type="button" class="btn" id="ts-batal-input">
+          <i class="fas fa-times"></i> <span data-i18n="cancel">Cancel</span>
+        </button>
+        <button type="button" class="btn primary" id="ts-next">
+          <i class="fas fa-arrow-right"></i> <span data-i18n="viewSummary">View Summary</span>
+        </button>
+      </div>
+    </div>
+    <div id="ts-step-summary" style="display:none">
+      <div id="ts-summary-content"></div>
+      <div class="form-actions" style="grid-column:span 1;margin-top:8px">
+        <button type="button" class="btn" id="ts-back">
+          <i class="fas fa-arrow-left"></i> <span data-i18n="back">Back</span>
+        </button>
+        <button type="button" class="btn danger" id="ts-confirm-close">
+          <i class="fas fa-door-closed"></i> <span data-i18n="confirmClose">Close Shift</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal" id="settings-modal">
+  <div class="modal-content">
+    <span class="close-btn" id="close-settings">&times;</span>
+    <h2 data-i18n="settings">Settings</h2>
+    <div class="form-group">
+      <label for="settings-brand" data-i18n="brandName">Brand Name</label>
+      <input type="text" id="settings-brand" maxlength="50" placeholder="My Business">
+    </div>
+    <div class="form-group">
+      <label data-i18n="categoriesPerLine">Categories</label>
+      <div id="settings-categories-list" class="cat-list"></div>
+      <button type="button" class="btn primary" id="add-category-btn"
+              style="margin-top:10px;width:100%;justify-content:center">
+        <i class="fas fa-plus"></i> <span data-i18n="addCategory">Add Category</span>
+      </button>
+    </div>
+    <div class="form-group">
+      <label for="settings-staff" data-i18n="staffViewOnly">Staff (managed via Manage Users — view only)</label>
+      <textarea id="settings-staff" rows="5" readonly></textarea>
+    </div>
+    <button type="button" class="btn" id="open-users" style="width:100%;justify-content:center;margin-top:8px">
+      <i class="fas fa-users-cog"></i> <span data-i18n="usersTitle">Manage Users</span>
+    </button>
+    <div class="form-actions">
+      <button type="button" class="btn" id="settings-reset">
+        <i class="fas fa-undo"></i> <span data-i18n="resetDefault">Reset Default</span>
+      </button>
+      <button type="button" class="btn primary" id="settings-save">
+        <i class="fas fa-save"></i> <span data-i18n="save">Save</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Help / Quick Start Modal -->
+<div class="modal" id="help-modal">
+  <div class="modal-content">
+    <span class="close-btn" id="close-help">&times;</span>
+    <h2><i class="fas fa-question-circle" style="color:var(--primary)"></i> <span data-i18n="helpTitle">Quick Start Guide</span></h2>
+    <div class="help-content" id="help-content"></div>
+  </div>
+</div>
+
+<!-- Filter Template -->
+<template id="filter-template">
+  <div class="filter-group">
+    <label for="search-input" title="Search"><i class="fas fa-search"></i></label>
+    <input type="text" id="search-input" data-i18n-ph="searchPlaceholder"
+           placeholder="Description, category, staff..." style="min-width:200px">
+  </div>
+  <div class="filter-group">
+    <label for="filter-jenis" title="Type"><i class="fas fa-filter"></i></label>
+    <select id="filter-jenis">
+      <option value="semua"    data-i18n="filterAll">All</option>
+      <option value="INCOME"   data-i18n="filterIncome">Income</option>
+      <option value="OUTGOING" data-i18n="filterOutgoing">Outgoing</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label for="filter-kategori" title="Category"><i class="fas fa-tags"></i></label>
+    <select id="filter-kategori">
+      <option value="semua" data-i18n="filterAll">All</option>
+    </select>
+  </div>
+  <button class="btn primary" id="apply-filter" title="Apply filter" data-i18n-title="applyFilter">
+    <i class="fas fa-check"></i>
+  </button>
+  <button class="btn" id="reset-filter" title="Reset" data-i18n-title="resetFilter">
+    <i class="fas fa-times"></i>
+  </button>
+</template>
+
+<div id="alert-container"></div>
+
+<script src="vendor/papaparse.min.js"></script>
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="lang.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
