@@ -89,6 +89,7 @@ body.header-hidden .header-actions-wrap {
 }
 
 header h1 { color: var(--primary); display: flex; align-items: center; gap: 10px; }
+.brand-logo { height: 1.2em; width: auto; object-fit: contain; }
 
 .current-date {
   background: none;
