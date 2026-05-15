@@ -78,7 +78,7 @@ const DEFAULT_STAFF      = ['Staff 1'];
 const DEFAULT_BRAND      = 'My Business';
 
 // Access gate — change this code to restrict who can use the app
-const APP_ACCESS_CODE    = 'chill2024';
+const APP_ACCESS_CODE    = 'smallbutspicy';
 const STORAGE_KEY_ACCESS = 'pos_access_granted';
 // Categories required by app logic — cannot be deleted via UI
 const SYSTEM_CATEGORIES  = ['START BALANCE'];
