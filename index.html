@@ -30,6 +30,7 @@
 
   <!-- Menu row: header-actions (collapses when eye icon in header is clicked) -->
   <div class="header-actions-wrap">
+    <div class="current-date" id="current-date"></div>
     <div class="header-actions">
       <button class="btn theme-toggle" id="open-help" title="Help / Quick Start">
         <i class="fas fa-question"></i>
@@ -55,16 +56,15 @@
   <div class="dashboard" id="dashboard"></div>
 
   <div class="action-bar">
-    <button class="btn primary" id="new-transaksi">
+    <button class="btn primary" id="new-transaksi" title="New Transaction">
       <i class="fas fa-plus"></i> <span data-i18n="newTransaction">New Transaction</span>
     </button>
-    <button class="btn success" id="download-excel" disabled>
+    <button class="btn success" id="download-excel" disabled title="Export Excel">
       <i class="fas fa-file-excel"></i> <span data-i18n="exportExcel">Export Excel</span>
     </button>
-    <button class="btn danger" id="tutup-shift">
+    <button class="btn danger" id="tutup-shift" title="Close Shift">
       <i class="fas fa-door-closed"></i> <span data-i18n="closeShift">Close Shift</span>
     </button>
-    <div class="current-date" id="current-date"></div>
   </div>
 
   <!-- Mobile card view (auto-shown < 769px) -->

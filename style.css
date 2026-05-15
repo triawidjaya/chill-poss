@@ -45,7 +45,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .header-actions-wrap {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 10px;
   margin-bottom: 20px;
   padding: 4px 0;
@@ -94,12 +94,11 @@ header h1 { color: var(--primary); display: flex; align-items: center; gap: 10px
 .current-date {
   background: none;
   color: var(--text-color);
-  padding: 8px 0;
-  margin-left: auto;
   font-weight: 500;
-  font-size: 0.9rem;
+  font-size: 0.72rem;
   white-space: nowrap;
   letter-spacing: 0.02em;
+  opacity: 0.7;
 }
 
 .theme-toggle { background: none; border: 1px solid var(--border-color); color: var(--text-color); width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 50%; cursor: pointer; transition: var(--transition); }
@@ -446,8 +445,6 @@ option { font-size: 10px; }
   #transaksi-form { grid-template-columns: 1fr; }
   .form-group.full-width { grid-column: span 1; }
   .dashboard { grid-template-columns: 1fr; }
-  .action-bar { flex-direction: column; }
-  #new-transaksi, #download-excel, #tutup-shift { width: 100%; }
   .summary-grid { grid-template-columns: 1fr; }
 }
 
