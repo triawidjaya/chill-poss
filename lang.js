@@ -42,7 +42,7 @@ const STRINGS = {
     historyShift:'Shift History',appTitle:'CHILL POS APP',
     newTransaction:'New Transaction',exportExcel:'Export Excel',
     hideAll:'Hide All',showAll:'Show All',closeShift:'Close Shift',
-    cashBalance:'Cash Balance',cardBalance:'Card Balance',otherBalance:'Other Balance',
+    cashBalance:'Cash Balance',cardBalance:'Card Balance',transferBalance:'Transfer Balance',qrisBalance:'QRIS Balance',otherBalance:'Other Balance',
     search:'Search',searchPlaceholder:'Description, category, staff...',
     filterType:'Type',filterAll:'All',filterIncome:'Income',filterOutgoing:'Outgoing',
     filterCategory:'Category',applyFilter:'Filter',resetFilter:'Reset',
@@ -59,8 +59,18 @@ const STRINGS = {
     resetDefault:'Reset Default',
     startShift:'Start Shift',staffOnDuty:'Staff on Duty',
     initialCashBalance:'Initial Cash Balance',startShiftBtn:'Start Shift',
-    closeShiftTitle:'Close Shift',closeShiftHint:'Enter the actual physical cash count.',
-    actualCash:'Actual Cash',actualCard:'Actual Card',
+    shiftPinHint:(name) => `Enter PIN for ${name} to start the shift.`,
+    shiftPinHintAdmin:(name) => `Enter PIN for ${name}, or your admin PIN to override.`,
+    shiftPinNoPin:(name) => `${name} has no PIN set. Ask an admin to set a PIN first.`,
+    shiftPinNoPinAdmin:'Target user has no PIN. Enter your admin PIN to start anyway.',
+    alertShiftPinRequired:'PIN is required to start the shift.',
+    alertShiftPinWrong:'Wrong PIN.',
+    alertShiftPinNoPin:'This staff has no PIN set. An admin must set their PIN before they can start a shift.',
+    closeShiftTitle:'Close Shift',closeShiftHint:'Verify the actual balance for each payment method.',
+    actualCash:'Actual Cash',actualCard:'Actual Card',actualTransfer:'Actual Transfer',actualQris:'Actual QRIS',
+    closingNote:'Closing Note',closingNoteOptional:'Optional — add a note if needed.',
+    closingNoteRequired:'Required — please explain the difference.',
+    alertNoteRequired:'Please provide a note explaining the difference before closing the shift.',
     back:'Back',viewSummary:'View Summary',confirmClose:'Close Shift',
     shiftSummary:'📊 Shift Closing Summary',method:'Method',
     expected:'Expected',actual:'Actual',difference:'Difference',
@@ -72,7 +82,7 @@ const STRINGS = {
     deleteSelected:'Delete Selected',noHistory:'No shift history yet.',
     noHistoryHint:'History will appear after the first shift is closed.',
     transactions:'transactions',cashExpected:'Cash (Expected)',
-    cardExpected:'Card (Expected)',totalSaldo:'Total Expected',
+    cardExpected:'Card (Expected)',transferExpected:'Transfer (Expected)',qrisExpected:'QRIS (Expected)',totalSaldo:'Total Expected',
     exportExcelBtn:'Export Excel',exportCsvBtn:'Export CSV',
     noTransactions:'No transactions',
     alertStartShiftFirst:'Please start a shift first!',
@@ -98,6 +108,13 @@ const STRINGS = {
     finishSetup:'Finish Setup',
     // Auth
     loginTitle:'Sign In',signIn:'Sign In',selectUser:'Select User',enterPin:'Enter PIN',
+    forgotPin:'Forgot PIN?',
+    resetPinTitle:'Reset PIN',
+    resetPinHint:'Enter the access code to reset PIN for any user. The access code is shared with the business owner.',
+    accessCode:'Access Code',newPin:'New PIN (4-6 digits)',
+    resetPinBtn:'Reset PIN',
+    wrongAccessCode:'Wrong access code.',
+    alertPinReset:'PIN reset successfully. Please sign in.',
     adminUser:'Admin User (from staff list above)',adminPin:'Admin PIN (4-6 digits)',
     confirmPin:'Confirm PIN',pinMismatch:'PIN does not match',pinTooShort:'PIN must be 4-6 digits',
     usersTitle:'Manage Users',addUser:'Add User',userExists:'Username already exists',
@@ -162,7 +179,8 @@ const STRINGS = {
 <ul>
   <li>All data is stored on this device (in browser). No cloud sync.</li>
   <li><b>Don't clear browser data</b> for this site — you'll lose all transactions and users.</li>
-  <li>If you forget the admin PIN, the only recovery is clearing browser data and re-running the wizard (you'll lose data).</li>
+  <li><b>Forgot PIN?</b> Click "Forgot PIN?" on the login screen → select the user → enter the <b>access code</b> (the one set when first opening the app) → set new PIN. Works for any user including admin.</li>
+  <li>If both the PIN and the access code are forgotten, the only recovery is clearing browser data and re-running the wizard (you'll lose data). Keep the access code somewhere safe.</li>
   <li>Open <code>history.html</code> to see closed shifts and re-export their data.</li>
 </ul>
 `,
@@ -177,7 +195,7 @@ const STRINGS = {
     historyShift:'Histori Shift',appTitle:'CHILL POS APP',
     newTransaction:'Transaksi Baru',exportExcel:'Export Excel',
     hideAll:'Sembunyikan',showAll:'Tampilkan',closeShift:'Tutup Shift',
-    cashBalance:'Saldo Cash',cardBalance:'Saldo Card',otherBalance:'Saldo Lainnya',
+    cashBalance:'Saldo Cash',cardBalance:'Saldo Card',transferBalance:'Saldo Transfer',qrisBalance:'Saldo QRIS',otherBalance:'Saldo Lainnya',
     search:'Cari',searchPlaceholder:'Deskripsi, kategori, staff...',
     filterType:'Jenis',filterAll:'Semua',filterIncome:'Pemasukan',filterOutgoing:'Pengeluaran',
     filterCategory:'Kategori',applyFilter:'Filter',resetFilter:'Reset',
@@ -194,8 +212,18 @@ const STRINGS = {
     resetDefault:'Reset Default',
     startShift:'Mulai Shift',staffOnDuty:'Staff Bertugas',
     initialCashBalance:'Saldo Cash Awal',startShiftBtn:'Mulai Shift',
-    closeShiftTitle:'Tutup Shift',closeShiftHint:'Masukkan jumlah uang fisik yang ada saat ini.',
-    actualCash:'Actual Cash',actualCard:'Actual Card',
+    shiftPinHint:(name) => `Masukkan PIN ${name} untuk memulai shift.`,
+    shiftPinHintAdmin:(name) => `Masukkan PIN ${name}, atau PIN admin Anda untuk override.`,
+    shiftPinNoPin:(name) => `${name} belum punya PIN. Minta admin untuk set PIN terlebih dahulu.`,
+    shiftPinNoPinAdmin:'User target belum punya PIN. Masukkan PIN admin Anda untuk tetap memulai.',
+    alertShiftPinRequired:'PIN wajib diisi untuk memulai shift.',
+    alertShiftPinWrong:'PIN salah.',
+    alertShiftPinNoPin:'Staff ini belum punya PIN. Admin harus set PIN dulu sebelum bisa mulai shift.',
+    closeShiftTitle:'Tutup Shift',closeShiftHint:'Verifikasi saldo aktual untuk setiap metode pembayaran.',
+    actualCash:'Aktual Cash',actualCard:'Aktual Card',actualTransfer:'Aktual Transfer',actualQris:'Aktual QRIS',
+    closingNote:'Catatan Penutupan',closingNoteOptional:'Opsional — tambahkan catatan jika diperlukan.',
+    closingNoteRequired:'Wajib — mohon jelaskan alasan selisih.',
+    alertNoteRequired:'Mohon berikan catatan alasan selisih sebelum menutup shift.',
     back:'Kembali',viewSummary:'Lihat Summary',confirmClose:'Tutup Shift',
     shiftSummary:'📊 Summary Penutupan Shift',method:'Metode',
     expected:'Expected',actual:'Aktual',difference:'Selisih',
@@ -207,7 +235,7 @@ const STRINGS = {
     deleteSelected:'Hapus Terpilih',noHistory:'Belum ada histori shift.',
     noHistoryHint:'Histori akan muncul setelah shift pertama ditutup.',
     transactions:'transaksi',cashExpected:'Cash (Expected)',
-    cardExpected:'Card (Expected)',totalSaldo:'Total Expected',
+    cardExpected:'Card (Expected)',transferExpected:'Transfer (Expected)',qrisExpected:'QRIS (Expected)',totalSaldo:'Total Expected',
     exportExcelBtn:'Export Excel',exportCsvBtn:'Export CSV',
     noTransactions:'Tidak ada transaksi',
     alertStartShiftFirst:'Mulai shift terlebih dahulu!',
@@ -233,6 +261,13 @@ const STRINGS = {
     finishSetup:'Selesai',
     // Auth
     loginTitle:'Masuk',signIn:'Masuk',selectUser:'Pilih Pengguna',enterPin:'Masukkan PIN',
+    forgotPin:'Lupa PIN?',
+    resetPinTitle:'Reset PIN',
+    resetPinHint:'Masukkan kode akses untuk reset PIN user. Kode akses dipegang oleh pemilik usaha.',
+    accessCode:'Kode Akses',newPin:'PIN Baru (4-6 digit)',
+    resetPinBtn:'Reset PIN',
+    wrongAccessCode:'Kode akses salah.',
+    alertPinReset:'PIN berhasil direset. Silakan login.',
     adminUser:'Pengguna Admin (dari daftar staff di atas)',adminPin:'PIN Admin (4-6 digit)',
     confirmPin:'Konfirmasi PIN',pinMismatch:'PIN tidak cocok',pinTooShort:'PIN harus 4-6 digit',
     usersTitle:'Kelola Pengguna',addUser:'Tambah Pengguna',userExists:'Nama pengguna sudah ada',
@@ -297,7 +332,8 @@ const STRINGS = {
 <ul>
   <li>Semua data disimpan di device ini (di browser). Tidak ada sync ke cloud.</li>
   <li><b>Jangan clear data browser</b> untuk situs ini — semua transaksi dan user akan hilang.</li>
-  <li>Kalau lupa PIN admin, satu-satunya cara pulih adalah clear data browser dan ulang wizard (data hilang).</li>
+  <li><b>Lupa PIN?</b> Klik "Lupa PIN?" di layar login → pilih user → masukkan <b>kode akses</b> (yang di-set saat pertama buka app) → atur PIN baru. Berlaku untuk semua user termasuk admin.</li>
+  <li>Kalau PIN dan kode akses sama-sama lupa, satu-satunya cara pulih adalah clear data browser dan ulang wizard (data hilang). Simpan kode akses di tempat aman.</li>
   <li>Buka <code>history.html</code> untuk lihat shift yang sudah tertutup dan export ulang datanya.</li>
 </ul>
 `,

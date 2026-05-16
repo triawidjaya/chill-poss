@@ -80,6 +80,17 @@ const DEFAULT_BRAND      = 'My Business';
 // Access gate — change this code to restrict who can use the app
 const APP_ACCESS_CODE    = 'smallbutspicy';
 const STORAGE_KEY_ACCESS = 'pos_access_granted';
+
+// AccessGate adapter — designed for Opsi 2 migration to Supabase.
+// Currently compares to a hardcoded constant. When migrating, swap the body
+// to call `supabase.rpc('verify_access_code', { code })` or remove entirely
+// in favor of email magic links. Caller code does not change.
+// See ROADMAP.md > Fase 2 > Batch 3.5 for the migration plan.
+const AccessGate = {
+  async verify(code) {
+    return code === APP_ACCESS_CODE;
+  },
+};
 // Categories required by app logic — cannot be deleted via UI
 const SYSTEM_CATEGORIES  = ['START BALANCE'];
 
@@ -164,14 +175,19 @@ const Auth = {
     if (!user) return { ok: false, reason: 'not_found' };
     if (user.pinHash) {
       if (!pin) return { ok: false, reason: 'pin_required' };
-      const [, salt, expected] = user.pinHash.split(':');
-      const got = await this._hashPIN(pin, salt);
-      if (got !== expected) return { ok: false, reason: 'wrong_pin' };
+      if (!(await this.verifyPin(user, pin))) return { ok: false, reason: 'wrong_pin' };
     }
     const session = { userId: user.id, loginAt: new Date().toISOString() };
     await AuthStorage.saveSession(session);
     this._currentUser = user;
     return { ok: true, user };
+  },
+
+  async verifyPin(user, pin) {
+    if (!user?.pinHash || !pin) return false;
+    const [, salt, expected] = user.pinHash.split(':');
+    const got = await this._hashPIN(pin, salt);
+    return got === expected;
   },
 
   async logout() {
@@ -312,10 +328,10 @@ class ChillPOS {
     const err   = document.getElementById('access-gate-error');
     modal.style.display = 'flex';
     document.getElementById('access-code-input').focus();
-    form.onsubmit = (e) => {
+    form.onsubmit = async (e) => {
       e.preventDefault();
       const input = document.getElementById('access-code-input').value;
-      if (input === APP_ACCESS_CODE) {
+      if (await AccessGate.verify(input)) {
         Storage.set(STORAGE_KEY_ACCESS, true);
         modal.style.display = 'none';
         this.bootstrapAuth();
@@ -325,6 +341,54 @@ class ChillPOS {
         document.getElementById('access-code-input').focus();
       }
     };
+  }
+
+  // PIN reset via shared access code — works for any user including last admin.
+  // See ROADMAP.md > Fase 2 > Batch 3.5 for the planned migration to email-based reset.
+  async showResetPinModal() {
+    const sel = document.getElementById('rp-user');
+    sel.innerHTML = '';
+    const users = await AuthStorage.getUsers();
+    users.forEach(u => {
+      const opt = document.createElement('option');
+      opt.value = u.id;
+      opt.textContent = `${u.username} (${t(u.role === 'admin' ? 'roleAdmin' : 'roleCashier')})`;
+      sel.appendChild(opt);
+    });
+    document.getElementById('reset-pin-form').reset();
+    document.getElementById('login-modal').style.display = 'none';
+    document.getElementById('reset-pin-modal').style.display = 'flex';
+  }
+
+  hideResetPinModal() {
+    document.getElementById('reset-pin-modal').style.display = 'none';
+    this.showLoginModal();
+  }
+
+  async handleResetPin() {
+    const userId  = document.getElementById('rp-user').value;
+    const code    = document.getElementById('rp-access-code').value;
+    const newPin  = document.getElementById('rp-new-pin').value;
+    const confirm = document.getElementById('rp-confirm-pin').value;
+
+    if (!/^\d{4,6}$/.test(newPin)) { this.showAlert(t('pinTooShort'), 'error'); return; }
+    if (newPin !== confirm)        { this.showAlert(t('pinMismatch'),  'error'); return; }
+
+    if (!(await AccessGate.verify(code))) {
+      this.showAlert(t('wrongAccessCode'), 'error');
+      document.getElementById('rp-access-code').value = '';
+      document.getElementById('rp-access-code').focus();
+      return;
+    }
+
+    try {
+      await Auth.setUserPIN(userId, newPin);
+      document.getElementById('reset-pin-modal').style.display = 'none';
+      this.showAlert(t('alertPinReset'), 'success');
+      this.showLoginModal();
+    } catch (e) {
+      this.showAlert(t(e.message) || e.message, 'error');
+    }
   }
 
   onLoginSuccess(user) {
@@ -394,6 +458,8 @@ class ChillPOS {
   async handleLogout() {
     await Auth.logout();
     document.getElementById('user-menu-popup').style.display = 'none';
+    // Close any modal that should not survive a logout
+    this.elements.mulaiShiftModal.style.display = 'none';
     this.showLoginModal();
   }
 
@@ -771,15 +837,22 @@ class ChillPOS {
       msStaff:         document.getElementById('ms-staff'),
       msCash:          document.getElementById('ms-cash'),
       msCashPreview:   document.getElementById('ms-cash-preview'),
+      msPin:           document.getElementById('ms-pin'),
+      msPinHint:       document.getElementById('ms-pin-hint'),
+      msLogout:        document.getElementById('ms-logout'),
       // Close Shift modal
       tutupShiftModal:     document.getElementById('tutup-shift-modal'),
       tsStepInput:         document.getElementById('ts-step-input'),
       tsStepSummary:       document.getElementById('ts-step-summary'),
-      tsActualCash:        document.getElementById('ts-actual-cash'),
-      tsActualCashPreview: document.getElementById('ts-actual-cash-preview'),
-      tsActualCard:        document.getElementById('ts-actual-card'),
-      tsActualCardPreview: document.getElementById('ts-actual-card-preview'),
-      tsSummaryContent:    document.getElementById('ts-summary-content'),
+      tsActualCash:            document.getElementById('ts-actual-cash'),
+      tsActualCashPreview:     document.getElementById('ts-actual-cash-preview'),
+      tsActualCard:            document.getElementById('ts-actual-card'),
+      tsActualCardPreview:     document.getElementById('ts-actual-card-preview'),
+      tsActualTransfer:        document.getElementById('ts-actual-transfer'),
+      tsActualTransferPreview: document.getElementById('ts-actual-transfer-preview'),
+      tsActualQris:            document.getElementById('ts-actual-qris'),
+      tsActualQrisPreview:     document.getElementById('ts-actual-qris-preview'),
+      tsSummaryContent:        document.getElementById('ts-summary-content'),
     };
   }
 
@@ -803,7 +876,7 @@ class ChillPOS {
 
     // Action bar
     this.elements.newTransaksiBtn.addEventListener('click', () => {
-      if (!this.shiftActive) { this.showAlert(t('alertStartShiftFirst'), 'error'); return; }
+      if (!this.shiftActive) { this.showMulaiShiftModal(); return; }
       this.showForm();
     });
     this.elements.downloadExcelBtn.addEventListener('click', () => this.exportToExcel());
@@ -860,6 +933,10 @@ class ChillPOS {
       this.elements.msCashPreview.textContent = raw ? this.formatCurrency(Number(raw)) : '';
     });
     this.elements.mulaiShiftForm.addEventListener('submit', (e) => { e.preventDefault(); this.mulaiShift(); });
+    // Refresh PIN hint when Staff on Duty changes (admin scenario)
+    this.elements.msStaff.addEventListener('change', () => this._refreshShiftPinHint());
+    // Logout escape hatch — esp. for cashier whose PIN isn't set yet
+    this.elements.msLogout.addEventListener('click', () => this.handleLogout());
 
     // Close Shift modal — format actual amounts
     const fmtInput = (inputEl, previewEl) => {
@@ -870,8 +947,10 @@ class ChillPOS {
         previewEl.textContent = raw ? this.formatCurrency(Number(raw)) : '';
       });
     };
-    fmtInput(this.elements.tsActualCash, this.elements.tsActualCashPreview);
-    fmtInput(this.elements.tsActualCard, this.elements.tsActualCardPreview);
+    fmtInput(this.elements.tsActualCash,     this.elements.tsActualCashPreview);
+    fmtInput(this.elements.tsActualCard,     this.elements.tsActualCardPreview);
+    fmtInput(this.elements.tsActualTransfer, this.elements.tsActualTransferPreview);
+    fmtInput(this.elements.tsActualQris,     this.elements.tsActualQrisPreview);
 
     document.getElementById('ts-next').addEventListener('click',         () => this.showTutupShiftSummary());
     document.getElementById('ts-back').addEventListener('click',         () => {
@@ -939,6 +1018,14 @@ class ChillPOS {
       this.handleLogin();
     });
     document.getElementById('login-user').addEventListener('change', () => this._togglePinFieldVisibility());
+
+    // PIN reset flow
+    document.getElementById('open-reset-pin').addEventListener('click', () => this.showResetPinModal());
+    document.getElementById('rp-cancel').addEventListener('click',     () => this.hideResetPinModal());
+    document.getElementById('reset-pin-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.handleResetPin();
+    });
 
     // Header user-menu toggle + logout
     document.getElementById('user-menu').addEventListener('click', (e) => {
@@ -1042,7 +1129,9 @@ class ChillPOS {
   // ============================================================
 
   checkShiftStatus() {
-    if (!this.shiftActive) this.showMulaiShiftModal();
+    // Cashier must start shift before doing anything; admin can browse freely
+    // and start a shift voluntarily by clicking "New Transaksi".
+    if (!this.shiftActive && Auth.hasRole('cashier')) this.showMulaiShiftModal();
     this.updateShiftUI();
   }
 
@@ -1060,12 +1149,70 @@ class ChillPOS {
     this.elements.msCash.value              = '';
     this.elements.msCash.dataset.raw        = '';
     this.elements.msCashPreview.textContent = '';
+    this.elements.msPin.value               = '';
+    this._refreshShiftPinHint();
     this.elements.mulaiShiftModal.style.display = 'flex';
   }
 
-  mulaiShift() {
+  // Updates the PIN hint text based on currently selected Staff on Duty.
+  // Three states: target has PIN, target has no PIN (admin can override),
+  // target has no PIN AND current user isn't admin (blocked).
+  async _refreshShiftPinHint() {
+    const staffName = this.elements.msStaff.value;
+    const cur       = Auth.currentUser();
+    const users     = await AuthStorage.getUsers();
+    const target    = users.find(u => u.username === staffName);
+    const isAdmin   = cur?.role === 'admin';
+    const hintEl    = this.elements.msPinHint;
+    if (!target?.pinHash) {
+      // No PIN on target. Admin can still proceed using own PIN; cashier cannot.
+      hintEl.textContent = isAdmin ? t('shiftPinNoPinAdmin') : t('shiftPinNoPin', staffName);
+      hintEl.style.color = 'var(--danger)';
+    } else {
+      hintEl.textContent = isAdmin && cur.username !== staffName
+        ? t('shiftPinHintAdmin', staffName)
+        : t('shiftPinHint', staffName);
+      hintEl.style.color = 'var(--gray)';
+    }
+  }
+
+  async mulaiShift() {
     const staff   = this.elements.msStaff.value;
     const rawCash = parseFloat(this.elements.msCash.dataset.raw || '0') || 0;
+    const pin     = (this.elements.msPin.value || '').trim();
+
+    // PIN validation: try target staff's PIN first; admin can override with own PIN.
+    const cur     = Auth.currentUser();
+    const isAdmin = cur?.role === 'admin';
+    const users   = await AuthStorage.getUsers();
+    const target  = users.find(u => u.username === staff);
+
+    if (!pin) {
+      this.showAlert(t('alertShiftPinRequired'), 'error');
+      this.elements.msPin.focus();
+      return;
+    }
+
+    // Non-admin attempting to start shift for a user with no PIN → blocked.
+    if (!target?.pinHash && !isAdmin) {
+      this.showAlert(t('alertShiftPinNoPin'), 'error');
+      return;
+    }
+
+    let pinOk = false;
+    if (target?.pinHash) pinOk = await Auth.verifyPin(target, pin);
+    // Admin override: when admin starts shift for someone else, OR target has no PIN,
+    // admin's own PIN is also accepted (authorizes the till opening).
+    if (!pinOk && isAdmin && (cur.username !== staff || !target?.pinHash)) {
+      pinOk = await Auth.verifyPin(cur, pin);
+    }
+
+    if (!pinOk) {
+      this.showAlert(t('alertShiftPinWrong'), 'error');
+      this.elements.msPin.value = '';
+      this.elements.msPin.focus();
+      return;
+    }
 
     // Save initial cash as a START BALANCE INCOME transaction
     const startTx = {
@@ -1091,11 +1238,14 @@ class ChillPOS {
   }
 
   updateShiftUI() {
-    const active = this.shiftActive;
-    this.elements.newTransaksiBtn.disabled       = !active;
-    this.elements.tutupShiftBtn.disabled         = !active;
-    this.elements.newTransaksiBtn.style.opacity  = active ? '1' : '0.45';
-    this.elements.tutupShiftBtn.style.opacity    = active ? '1' : '0.45';
+    const active  = this.shiftActive;
+    const isAdmin = Auth.hasRole('admin');
+    // Admin can click "New Transaksi" without an active shift — it opens the
+    // start-shift modal instead of erroring. Close-shift stays gated on active.
+    this.elements.newTransaksiBtn.disabled      = !active && !isAdmin;
+    this.elements.tutupShiftBtn.disabled        = !active;
+    this.elements.newTransaksiBtn.style.opacity = (active || isAdmin) ? '1' : '0.45';
+    this.elements.tutupShiftBtn.style.opacity   = active ? '1' : '0.45';
   }
 
   // ============================================================
@@ -1147,11 +1297,10 @@ class ChillPOS {
   }
 
   renderDashboard() {
-    const saldoCash  = this.calculateSaldo('Cash');
-    const saldoCard  = this.calculateSaldo('Card');
-    const saldoOther = this.transactions
-      .filter(tx => !['Cash', 'Card'].includes(tx.metode))
-      .reduce((sum, tx) => sum + tx.jumlah, 0);
+    const saldoCash     = this.calculateSaldo('Cash');
+    const saldoCard     = this.calculateSaldo('Card');
+    const saldoTransfer = this.calculateSaldo('Transfer');
+    const saldoQris     = this.calculateSaldo('Qris');
 
     this.elements.dashboard.innerHTML = `
       <div class="card">
@@ -1163,8 +1312,12 @@ class ChillPOS {
         <div class="amount">${this.formatCurrency(saldoCard)}</div>
       </div>
       <div class="card">
-        <h3><i class="fas fa-wallet"></i> ${t('otherBalance')}</h3>
-        <div class="amount">${this.formatCurrency(saldoOther)}</div>
+        <h3><i class="fas fa-exchange-alt"></i> ${t('transferBalance')}</h3>
+        <div class="amount">${this.formatCurrency(saldoTransfer)}</div>
+      </div>
+      <div class="card">
+        <h3><i class="fas fa-qrcode"></i> ${t('qrisBalance')}</h3>
+        <div class="amount">${this.formatCurrency(saldoQris)}</div>
       </div>
     `;
   }
@@ -1574,30 +1727,36 @@ class ChillPOS {
     if (this.transactions.length === 0) {
       this.showAlert(t('alertNoShift'), 'error'); return;
     }
-    // Reset to step 1
-    this.elements.tsActualCash.value             = '';
-    this.elements.tsActualCash.dataset.raw        = '';
-    this.elements.tsActualCashPreview.textContent = '';
-    this.elements.tsActualCard.value             = '';
-    this.elements.tsActualCard.dataset.raw        = '';
-    this.elements.tsActualCardPreview.textContent = '';
-    this.elements.tsStepInput.style.display       = '';
-    this.elements.tsStepSummary.style.display      = 'none';
-    this.elements.tutupShiftModal.style.display    = 'flex';
+    // Reset to step 1 — clear all four actual inputs
+    const resetField = (input, preview) => {
+      input.value         = '';
+      input.dataset.raw   = '';
+      preview.textContent = '';
+    };
+    resetField(this.elements.tsActualCash,     this.elements.tsActualCashPreview);
+    resetField(this.elements.tsActualCard,     this.elements.tsActualCardPreview);
+    resetField(this.elements.tsActualTransfer, this.elements.tsActualTransferPreview);
+    resetField(this.elements.tsActualQris,     this.elements.tsActualQrisPreview);
+    this.elements.tsStepInput.style.display     = '';
+    this.elements.tsStepSummary.style.display   = 'none';
+    this.elements.tutupShiftModal.style.display = 'flex';
   }
 
   showTutupShiftSummary() {
-    const actualCash = parseFloat(this.elements.tsActualCash.dataset.raw || '0') || 0;
-    const actualCard = parseFloat(this.elements.tsActualCard.dataset.raw || '0') || 0;
+    const actualCash     = parseFloat(this.elements.tsActualCash.dataset.raw     || '0') || 0;
+    const actualCard     = parseFloat(this.elements.tsActualCard.dataset.raw     || '0') || 0;
+    const actualTransfer = parseFloat(this.elements.tsActualTransfer.dataset.raw || '0') || 0;
+    const actualQris     = parseFloat(this.elements.tsActualQris.dataset.raw     || '0') || 0;
 
-    const expectedCash  = this.calculateSaldo('Cash');
-    const expectedCard  = this.calculateSaldo('Card');
-    const expectedOther = this.transactions
-      .filter(tx => !['Cash', 'Card'].includes(tx.metode))
-      .reduce((sum, tx) => sum + tx.jumlah, 0);
+    const expectedCash     = this.calculateSaldo('Cash');
+    const expectedCard     = this.calculateSaldo('Card');
+    const expectedTransfer = this.calculateSaldo('Transfer');
+    const expectedQris     = this.calculateSaldo('Qris');
 
-    const selisihCash = actualCash - expectedCash;
-    const selisihCard = actualCard - expectedCard;
+    const selisihCash     = actualCash     - expectedCash;
+    const selisihCard     = actualCard     - expectedCard;
+    const selisihTransfer = actualTransfer - expectedTransfer;
+    const selisihQris     = actualQris     - expectedQris;
 
     const fmtSelisih = (val) => {
       if (val === 0) return `<span class="ts-diff-exact">${t('exact')}</span>`;
@@ -1607,7 +1766,21 @@ class ChillPOS {
       return `<span class="${cls}">${sign}${this.formatCurrency(val)} ${label}</span>`;
     };
 
-    this._pendingActual = { actualCash, actualCard };
+    const hasSelisih = selisihCash !== 0 || selisihCard !== 0 ||
+                       selisihTransfer !== 0 || selisihQris !== 0;
+
+    this._pendingActual = { actualCash, actualCard, actualTransfer, actualQris, hasSelisih };
+
+    const row = (icon, label, expected, actual, selisih) => `
+      <tr>
+        <td><i class="fas ${icon}"></i> ${label}</td>
+        <td>${this.formatCurrency(expected)}</td>
+        <td class="actual-cell">${this.formatCurrency(actual)}</td>
+        <td>${fmtSelisih(selisih)}</td>
+      </tr>`;
+
+    const noteHintClass = hasSelisih ? 'note-hint required' : 'note-hint';
+    const noteHintText  = hasSelisih ? t('closingNoteRequired') : t('closingNoteOptional');
 
     this.elements.tsSummaryContent.innerHTML = `
       <div class="shift-summary">
@@ -1622,29 +1795,20 @@ class ChillPOS {
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td><i class="fas fa-money-bill-wave"></i> Cash</td>
-              <td>${this.formatCurrency(expectedCash)}</td>
-              <td class="actual-cell">${this.formatCurrency(actualCash)}</td>
-              <td>${fmtSelisih(selisihCash)}</td>
-            </tr>
-            <tr>
-              <td><i class="fas fa-credit-card"></i> Card</td>
-              <td>${this.formatCurrency(expectedCard)}</td>
-              <td class="actual-cell">${this.formatCurrency(actualCard)}</td>
-              <td>${fmtSelisih(selisihCard)}</td>
-            </tr>
-            <tr>
-              <td><i class="fas fa-wallet"></i> Other</td>
-              <td>${this.formatCurrency(expectedOther)}</td>
-              <td class="muted">—</td>
-              <td class="muted">—</td>
-            </tr>
+            ${row('fa-money-bill-wave', 'Cash',     expectedCash,     actualCash,     selisihCash)}
+            ${row('fa-credit-card',     'Card',     expectedCard,     actualCard,     selisihCard)}
+            ${row('fa-exchange-alt',    'Transfer', expectedTransfer, actualTransfer, selisihTransfer)}
+            ${row('fa-qrcode',          'QRIS',     expectedQris,     actualQris,     selisihQris)}
           </tbody>
         </table>
         <div class="total-summary">
           <span>${t('totalExpected')}</span>
-          <span class="total-amount">${this.formatCurrency(expectedCash + expectedCard + expectedOther)}</span>
+          <span class="total-amount">${this.formatCurrency(expectedCash + expectedCard + expectedTransfer + expectedQris)}</span>
+        </div>
+        <div class="form-group ts-note-group">
+          <label for="ts-closing-note">${t('closingNote')}${hasSelisih ? ' <span class="req-marker">*</span>' : ''}</label>
+          <textarea id="ts-closing-note" rows="2" maxlength="500"></textarea>
+          <small class="${noteHintClass}">${noteHintText}</small>
         </div>
         <p class="summary-info">${t('balanceReset')}</p>
       </div>
@@ -1655,14 +1819,30 @@ class ChillPOS {
   }
 
   eksekusiTutupShift() {
-    const { actualCash, actualCard } = this._pendingActual || { actualCash: 0, actualCard: 0 };
-    const expectedCash = this.calculateSaldo('Cash');
-    const expectedCard = this.calculateSaldo('Card');
+    const { actualCash, actualCard, actualTransfer, actualQris, hasSelisih } =
+      this._pendingActual || { actualCash: 0, actualCard: 0, actualTransfer: 0, actualQris: 0, hasSelisih: false };
+
+    // Note is mandatory when there's a difference — staff must explain why.
+    const noteEl = document.getElementById('ts-closing-note');
+    const note   = (noteEl?.value || '').trim();
+    if (hasSelisih && !note) {
+      this.showAlert(t('alertNoteRequired'), 'error');
+      noteEl?.focus();
+      return;
+    }
+
+    const expectedCash     = this.calculateSaldo('Cash');
+    const expectedCard     = this.calculateSaldo('Card');
+    const expectedTransfer = this.calculateSaldo('Transfer');
+    const expectedQris     = this.calculateSaldo('Qris');
 
     this._actualForHistory = {
-      actualCash, actualCard,
-      selisihCash: actualCash - expectedCash,
-      selisihCard: actualCard - expectedCard,
+      actualCash, actualCard, actualTransfer, actualQris,
+      selisihCash:     actualCash     - expectedCash,
+      selisihCard:     actualCard     - expectedCard,
+      selisihTransfer: actualTransfer - expectedTransfer,
+      selisihQris:     actualQris     - expectedQris,
+      closingNote:     note,
     };
 
     this.saveShiftHistory();
@@ -1687,27 +1867,31 @@ class ChillPOS {
 
   saveShiftHistory() {
     const MAX_HISTORY = 50;
-    const staff = [...new Set(this.transactions.map(tx => tx.staff))];
-    const cash  = this.calculateSaldo('Cash');
-    const card  = this.calculateSaldo('Card');
-    const other = this.transactions
-      .filter(tx => !['Cash', 'Card'].includes(tx.metode))
-      .reduce((sum, tx) => sum + tx.jumlah, 0);
+    const staff    = [...new Set(this.transactions.map(tx => tx.staff))];
+    const cash     = this.calculateSaldo('Cash');
+    const card     = this.calculateSaldo('Card');
+    const transfer = this.calculateSaldo('Transfer');
+    const qris     = this.calculateSaldo('Qris');
 
     const shiftRecord = {
       id:       `shift_${Date.now()}`,
       closedAt: new Date().toISOString(),
       staff,
       summary: {
-        cash, card, other,
-        total:            cash + card + other,
+        cash, card, transfer, qris,
+        total:            cash + card + transfer + qris,
         totalIncome:      this.transactions.filter(tx => tx.jenis === 'INCOME').reduce((s, tx) => s + tx.jumlah, 0),
         totalOutgoing:    this.transactions.filter(tx => tx.jenis === 'OUTGOING').reduce((s, tx) => s + tx.jumlah, 0),
         jumlahTransaksi:  this.transactions.length,
-        actualCash:  this._actualForHistory?.actualCash  ?? null,
-        actualCard:  this._actualForHistory?.actualCard  ?? null,
-        selisihCash: this._actualForHistory?.selisihCash ?? null,
-        selisihCard: this._actualForHistory?.selisihCard ?? null,
+        actualCash:      this._actualForHistory?.actualCash      ?? null,
+        actualCard:      this._actualForHistory?.actualCard      ?? null,
+        actualTransfer:  this._actualForHistory?.actualTransfer  ?? null,
+        actualQris:      this._actualForHistory?.actualQris      ?? null,
+        selisihCash:     this._actualForHistory?.selisihCash     ?? null,
+        selisihCard:     this._actualForHistory?.selisihCard     ?? null,
+        selisihTransfer: this._actualForHistory?.selisihTransfer ?? null,
+        selisihQris:     this._actualForHistory?.selisihQris     ?? null,
+        closingNote:     this._actualForHistory?.closingNote     ?? '',
       },
       transactions: this.transactions.map(tx => ({ ...tx }))
     };

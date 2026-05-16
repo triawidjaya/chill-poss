@@ -58,7 +58,10 @@
     @media(max-width:600px){.shift-card-badges{display:none}.history-toolbar{flex-direction:column;align-items:flex-start}.history-header{flex-direction:column;align-items:flex-start;gap:12px}}
   </style>
 </head>
-<body class="light-theme">
+<body>
+<script>
+  (function(){try{document.body.className=(JSON.parse(localStorage.getItem('theme'))||'light')+'-theme';}catch(e){document.body.className='light-theme';}}());
+</script>
 <div class="container">
 
   <div class="history-header">
@@ -390,6 +393,17 @@ function renderDetail(shift) {
   };
 
   const hasActual = s.actualCash !== null && s.actualCash !== undefined;
+  // Transfer/QRIS actuals were added later — legacy shifts won't have them.
+  const hasActualTransfer = s.actualTransfer !== null && s.actualTransfer !== undefined;
+  const hasActualQris     = s.actualQris     !== null && s.actualQris     !== undefined;
+
+  const actualRow = (icon, label, expected, actual, selisih) => `
+    <tr style="border-bottom:1px solid var(--border-color)">
+      <td style="padding:7px 10px">${icon} ${label}</td>
+      <td style="padding:7px 10px;text-align:right">${fmt(expected || 0)}</td>
+      <td style="padding:7px 10px;text-align:right;font-weight:600">${fmt(actual)}</td>
+      <td style="padding:7px 10px;text-align:right">${fmtDiff(selisih)}</td>
+    </tr>`;
 
   const actualSection = hasActual ? `
     <table style="width:100%;border-collapse:collapse;font-size:0.85rem;margin-bottom:16px">
@@ -402,20 +416,16 @@ function renderDetail(shift) {
         </tr>
       </thead>
       <tbody>
-        <tr style="border-bottom:1px solid var(--border-color)">
-          <td style="padding:7px 10px">💵 Cash</td>
-          <td style="padding:7px 10px;text-align:right">${fmt(s.cash||0)}</td>
-          <td style="padding:7px 10px;text-align:right;font-weight:600">${fmt(s.actualCash)}</td>
-          <td style="padding:7px 10px;text-align:right">${fmtDiff(s.selisihCash)}</td>
-        </tr>
-        <tr>
-          <td style="padding:7px 10px">💳 Card</td>
-          <td style="padding:7px 10px;text-align:right">${fmt(s.card||0)}</td>
-          <td style="padding:7px 10px;text-align:right;font-weight:600">${fmt(s.actualCard)}</td>
-          <td style="padding:7px 10px;text-align:right">${fmtDiff(s.selisihCard)}</td>
-        </tr>
+        ${actualRow('💵', 'Cash', s.cash, s.actualCash, s.selisihCash)}
+        ${actualRow('💳', 'Card', s.card, s.actualCard, s.selisihCard)}
+        ${hasActualTransfer ? actualRow('🔄', 'Transfer', s.transfer, s.actualTransfer, s.selisihTransfer) : ''}
+        ${hasActualQris     ? actualRow('📱', 'QRIS',     s.qris,     s.actualQris,     s.selisihQris)     : ''}
       </tbody>
-    </table>` : '';
+    </table>
+    ${s.closingNote ? `
+      <div style="background:var(--card-bg);border-left:3px solid var(--primary);padding:10px 12px;margin-bottom:16px;border-radius:4px;font-size:0.85rem">
+        <strong>${t('closingNote')}:</strong> ${escapeHtml(s.closingNote)}
+      </div>` : ''}` : '';
 
   const rows = (shift.transactions || []).map(tx => {
     const isIncome = tx.jenis === 'INCOME';
@@ -434,6 +444,22 @@ function renderDetail(shift) {
       </tr>`;
   }).join('');
 
+  // New shifts store transfer+qris separately; legacy shifts have a single `other` field.
+  const hasNewBreakdown = s.transfer !== undefined || s.qris !== undefined;
+  const extraCards = hasNewBreakdown ? `
+      <div class="detail-saldo-item">
+        <div class="detail-saldo-label">${t('transferExpected')}</div>
+        <div class="detail-saldo-amount">${fmt(s.transfer||0)}</div>
+      </div>
+      <div class="detail-saldo-item">
+        <div class="detail-saldo-label">${t('qrisExpected')}</div>
+        <div class="detail-saldo-amount">${fmt(s.qris||0)}</div>
+      </div>` : `
+      <div class="detail-saldo-item">
+        <div class="detail-saldo-label">Other</div>
+        <div class="detail-saldo-amount">${fmt(s.other||0)}</div>
+      </div>`;
+
   return `
     <div class="detail-summary">
       <div class="detail-saldo-item">
@@ -443,11 +469,7 @@ function renderDetail(shift) {
       <div class="detail-saldo-item">
         <div class="detail-saldo-label">${t('cardExpected')}</div>
         <div class="detail-saldo-amount">${fmt(s.card||0)}</div>
-      </div>
-      <div class="detail-saldo-item">
-        <div class="detail-saldo-label">Other</div>
-        <div class="detail-saldo-amount">${fmt(s.other||0)}</div>
-      </div>
+      </div>${extraCards}
       <div class="detail-saldo-item total-item">
         <div class="detail-saldo-label">${t('totalSaldo')}</div>
         <div class="detail-saldo-amount">${fmt(s.total||0)}</div>

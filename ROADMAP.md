@@ -163,6 +163,31 @@ Sebelum mulai Fase 2, **WAJIB punya minimal 1 user Basic yang minta multi-device
 - [ ] `SupabaseAuthStorage` (CRUD users di Supabase table)
 - [ ] Test auth flow lengkap di mode Supabase
 
+#### Batch 3.5: PIN Reset & Access Gate Migration (~2 jam)
+
+**Konteks dari Fase 1:**
+Di local-first mode, PIN reset pakai `APP_ACCESS_CODE` (shared secret) sebagai fallback authority lewat `AccessGate` adapter. Acceptable untuk MVP, tapi punya 2 keterbatasan yang wajib di-address saat migrate:
+1. **Shared secret risk** — semua user tahu kode yang sama; siapa pun yang tahu access code bisa reset PIN admin
+2. **Recovery loop** — kalau access code juga lupa, satu-satunya cara adalah clear localStorage (data loss)
+
+**Architecture preparation di Fase 1:** sudah pakai `AccessGate` adapter pattern (mirror dari `AuthStorage`). Migrate = swap adapter body, caller code tidak berubah.
+
+**Saat Fase 2 (Supabase migration):**
+- [ ] **Replace PIN reset flow** dengan email magic link via Supabase Auth (standard SaaS pattern)
+- [ ] **Decide nasib access gate:**
+  - Option A: Hapus sepenuhnya — Supabase Auth jadi gating layer otomatis
+  - Option B: Pertahankan tapi per-tenant (hashed di table `tenants`, rotatable dari admin UI)
+- [ ] **Migration script untuk existing users:**
+  - Cashier: trigger email verification → auto-set Supabase auth identity
+  - Admin: send PIN reset email pakai email yang di-collect saat onboarding (lihat pertanyaan terbuka di bawah)
+- [ ] **Communication plan:** existing users perlu di-notify bahwa PIN reset flow berubah sebelum migrate
+- [ ] **Deprecate `APP_ACCESS_CODE`** di source setelah semua user migrate
+
+**Pertanyaan terbuka untuk Fase 2 design:**
+- Tambahkan email field ke User di Fase 1 (biar saat migrate sudah ada email untuk magic link)?
+- Atau accept bahwa migrasi = re-onboarding (user setup ulang akun dengan email)?
+- Untuk Premium tier, perlukah ada admin recovery via support manual (kontak developer dengan bukti kepemilikan tenant)?
+
 #### Batch 4: Realtime Subscriptions (~4 jam)
 - [ ] Subscribe ke `pos_transactions` changes → re-render table saat ada update
 - [ ] Subscribe ke `pos_session` → kalau user logout dari device lain, force logout

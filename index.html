@@ -7,7 +7,10 @@
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
 </head>
-<body class="light-theme">
+<body>
+<script>
+  (function(){try{document.body.className=(JSON.parse(localStorage.getItem('theme'))||'light')+'-theme';}catch(e){document.body.className='light-theme';}}());
+</script>
 
 <div class="container">
 
@@ -209,6 +212,44 @@
           <i class="fas fa-sign-in-alt"></i> <span data-i18n="signIn">Sign In</span>
         </button>
       </div>
+      <div style="text-align:center;margin-top:12px">
+        <button type="button" class="link-btn" id="open-reset-pin" data-i18n="forgotPin">Forgot PIN?</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Reset PIN Modal — recover via shared access code -->
+<div class="modal" id="reset-pin-modal">
+  <div class="modal-content small">
+    <h2><i class="fas fa-key" style="color:var(--primary)"></i>
+        <span data-i18n="resetPinTitle">Reset PIN</span></h2>
+    <p class="wizard-hint" data-i18n="resetPinHint">Enter the access code to reset PIN for any user.</p>
+    <form id="reset-pin-form">
+      <div class="form-group">
+        <label for="rp-user" data-i18n="selectUser">Select User</label>
+        <select id="rp-user" required></select>
+      </div>
+      <div class="form-group">
+        <label for="rp-access-code" data-i18n="accessCode">Access Code</label>
+        <input type="password" id="rp-access-code" autocomplete="off" required>
+      </div>
+      <div class="form-group">
+        <label for="rp-new-pin" data-i18n="newPin">New PIN (4-6 digits)</label>
+        <input type="password" id="rp-new-pin" inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6" required>
+      </div>
+      <div class="form-group">
+        <label for="rp-confirm-pin" data-i18n="confirmPin">Confirm PIN</label>
+        <input type="password" id="rp-confirm-pin" inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6" required>
+      </div>
+      <div class="form-actions" style="grid-column:span 1;display:flex;gap:8px">
+        <button type="button" class="btn" id="rp-cancel" style="flex:0 0 auto">
+          <i class="fas fa-arrow-left"></i> <span data-i18n="back">Back</span>
+        </button>
+        <button type="submit" class="btn primary" style="flex:1;justify-content:center">
+          <i class="fas fa-key"></i> <span data-i18n="resetPinBtn">Reset PIN</span>
+        </button>
+      </div>
     </form>
   </div>
 </div>
@@ -261,8 +302,16 @@
         <input type="text" id="ms-cash" inputmode="numeric" autocomplete="off" placeholder="0" required>
         <small id="ms-cash-preview" style="color:var(--gray);font-size:0.8rem;margin-top:4px;display:block"></small>
       </div>
-      <div class="form-actions" style="grid-column:span 1">
-        <button type="submit" class="btn success" style="width:100%;justify-content:center">
+      <div class="form-group" id="ms-pin-group">
+        <label for="ms-pin"><span data-i18n="pin">PIN</span> <span class="req-marker">*</span></label>
+        <input type="password" id="ms-pin" inputmode="numeric" autocomplete="off" placeholder="••••" maxlength="6">
+        <small id="ms-pin-hint" style="font-size:0.78rem;margin-top:4px;display:block;color:var(--gray)"></small>
+      </div>
+      <div class="form-actions" style="grid-column:span 1;display:flex;gap:8px">
+        <button type="button" class="btn" id="ms-logout" style="flex:0 0 auto" title="Logout">
+          <i class="fas fa-sign-out-alt"></i> <span data-i18n="logout">Sign Out</span>
+        </button>
+        <button type="submit" class="btn success" style="flex:1;justify-content:center">
           <i class="fas fa-play"></i> <span data-i18n="startShiftBtn">Start Shift</span>
         </button>
       </div>
@@ -349,7 +398,7 @@
     </h2>
     <div id="ts-step-input">
       <p style="color:var(--gray);font-size:0.9rem;margin-bottom:16px" data-i18n="closeShiftHint">
-        Enter the actual physical cash count.
+        Verify the actual balance for each payment method.
       </p>
       <div class="form-group">
         <label for="ts-actual-cash" data-i18n="actualCash">Actual Cash</label>
@@ -360,6 +409,16 @@
         <label for="ts-actual-card" data-i18n="actualCard">Actual Card</label>
         <input type="text" id="ts-actual-card" inputmode="numeric" autocomplete="off" placeholder="0">
         <small id="ts-actual-card-preview" style="color:var(--gray);font-size:0.8rem;margin-top:4px;display:block"></small>
+      </div>
+      <div class="form-group">
+        <label for="ts-actual-transfer" data-i18n="actualTransfer">Actual Transfer</label>
+        <input type="text" id="ts-actual-transfer" inputmode="numeric" autocomplete="off" placeholder="0">
+        <small id="ts-actual-transfer-preview" style="color:var(--gray);font-size:0.8rem;margin-top:4px;display:block"></small>
+      </div>
+      <div class="form-group">
+        <label for="ts-actual-qris" data-i18n="actualQris">Actual QRIS</label>
+        <input type="text" id="ts-actual-qris" inputmode="numeric" autocomplete="off" placeholder="0">
+        <small id="ts-actual-qris-preview" style="color:var(--gray);font-size:0.8rem;margin-top:4px;display:block"></small>
       </div>
       <div class="form-actions" style="grid-column:span 1;margin-top:8px">
         <button type="button" class="btn" id="ts-batal-input">

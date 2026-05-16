@@ -439,6 +439,15 @@ th[data-kolom] .fa-sort-down { opacity: 1; }
 .ts-diff-over  { color: var(--info);    font-weight: 600; }
 .ts-diff-short { color: var(--danger);  font-weight: 600; }
 
+.ts-note-group { margin-top: 16px; }
+.ts-note-group textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--card-bg); color: var(--text-color); font-family: inherit; font-size: 0.9rem; resize: vertical; min-height: 50px; }
+.ts-note-group .note-hint { display: block; font-size: 0.78rem; color: var(--gray); margin-top: 4px; }
+.ts-note-group .note-hint.required { color: var(--danger); font-weight: 500; }
+.req-marker { color: var(--danger); font-weight: 700; }
+
+.link-btn { background: none; border: none; color: var(--primary); cursor: pointer; font-size: 0.85rem; text-decoration: underline; padding: 4px 8px; font-family: inherit; }
+.link-btn:hover { opacity: 0.8; }
+
 option { font-size: 10px; }
 
 @media (max-width: 768px) {
