@@ -104,6 +104,8 @@ const STRINGS = {
     alertCategoryEmpty:'Categories and staff cannot be empty!',
     alertDeleteShift:(n) => `Delete ${n} selected shift(s)? This cannot be undone.`,
     alertShiftsDeleted:'Selected shifts deleted.',
+    confirmDeleteShiftSingle:(date) => `Delete this shift (closed ${date})? This cannot be undone.`,
+    deleteShift:'Delete Shift',
     noTransactionsTable:'No transactions',
     noResults:(q) => `No results for "${q}"`,
     kembali:'Back',
@@ -139,6 +141,7 @@ const STRINGS = {
     chartTitle:'Income vs Outgoing',chartIncome:'Income',chartOutgoing:'Outgoing',chartNoData:'No transactions yet',
     noResultsRange:'No shifts in this date range',
     helpTitle:'Quick Start Guide',
+    helpReadFirst:'Read Quick Start Guide first',
     helpBody:`
 <h3><i class="fas fa-rocket"></i> First-time setup</h3>
 <ol>
@@ -261,6 +264,8 @@ const STRINGS = {
     alertCategoryEmpty:'Kategori dan staff tidak boleh kosong!',
     alertDeleteShift:(n) => `Hapus ${n} shift terpilih? Tindakan ini tidak bisa dibatalkan.`,
     alertShiftsDeleted:'Shift terpilih berhasil dihapus.',
+    confirmDeleteShiftSingle:(date) => `Hapus shift ini (ditutup ${date})? Tindakan ini tidak bisa dibatalkan.`,
+    deleteShift:'Hapus Shift',
     noTransactionsTable:'Tidak ada transaksi',
     noResults:(q) => `Tidak ada hasil untuk "${q}"`,
     kembali:'Kembali',
@@ -296,6 +301,7 @@ const STRINGS = {
     chartTitle:'Pemasukan vs Pengeluaran',chartIncome:'Pemasukan',chartOutgoing:'Pengeluaran',chartNoData:'Belum ada transaksi',
     noResultsRange:'Tidak ada shift di rentang tanggal ini',
     helpTitle:'Panduan Singkat',
+    helpReadFirst:'Lihat Panduan Singkat dulu',
     helpBody:`
 <h3><i class="fas fa-rocket"></i> Setup pertama kali</h3>
 <ol>

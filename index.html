@@ -35,9 +35,6 @@
   <div class="header-actions-wrap">
     <div class="current-date" id="current-date"></div>
     <div class="header-actions">
-      <button class="btn theme-toggle" id="open-help" title="Help / Quick Start">
-        <i class="fas fa-question"></i>
-      </button>
       <button class="btn theme-toggle" id="open-settings" title="Settings">
         <i class="fas fa-cog"></i>
       </button>
@@ -124,6 +121,9 @@
     <p class="wizard-hint" data-i18n="welcomeHint">
       Customize the basics now — you can change them anytime in Settings.
     </p>
+    <button type="button" class="btn" id="wizard-help" style="width:100%;justify-content:center;margin-bottom:16px;background:rgba(67,97,238,0.08);border:1px dashed var(--primary);color:var(--primary)">
+      <i class="fas fa-question-circle"></i> <span data-i18n="helpReadFirst">Read Quick Start Guide first</span>
+    </button>
     <form id="first-run-form">
       <div class="form-group">
         <label for="fr-brand" data-i18n="brandName">Brand Name</label>
@@ -476,6 +476,9 @@
     </div>
     <button type="button" class="btn" id="open-users" style="width:100%;justify-content:center;margin-top:8px">
       <i class="fas fa-users-cog"></i> <span data-i18n="usersTitle">Manage Users</span>
+    </button>
+    <button type="button" class="btn" id="settings-help" style="width:100%;justify-content:center;margin-top:8px">
+      <i class="fas fa-question-circle"></i> <span data-i18n="helpTitle">Quick Start Guide</span>
     </button>
     <div class="form-actions">
       <button type="button" class="btn" id="settings-reset">

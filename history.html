@@ -55,6 +55,13 @@
     .detail-table-wrap td{padding:6px 10px;border-bottom:1px solid var(--border-color)}
     .detail-table-wrap tr:last-child td{border-bottom:none}
     .detail-table-wrap tr:hover{background:rgba(0,0,0,0.03)}
+    .shift-duration-banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;background:rgba(67,97,238,0.06);border-left:3px solid var(--primary);border-radius:4px;margin-bottom:14px;font-size:0.82rem;color:var(--text-color)}
+    .shift-duration-banner.long{background:rgba(247,37,133,0.08);border-left-color:var(--danger)}
+    .shift-duration-banner i.fa-clock{color:var(--primary)}
+    .shift-duration-banner.long i.fa-clock{color:var(--danger)}
+    .dur-pill{background:var(--primary);color:white;padding:2px 10px;border-radius:999px;font-weight:600;font-size:0.78rem}
+    .dur-pill.long{background:var(--danger)}
+    .dur-warn{color:var(--danger);font-weight:600;font-size:0.78rem}
     .hs-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:16px}
     .hs-actual-table{width:100%;border-collapse:collapse;font-size:0.85rem}
     .hs-actual-table th{background:var(--primary);color:white;padding:7px 8px;text-align:left;font-weight:500;white-space:nowrap}
@@ -389,6 +396,17 @@ function renderList() {
 
     card.querySelector('.btn-export-excel')?.addEventListener('click', () => exportShift(shift, 'excel'));
     card.querySelector('.btn-export-csv')?.addEventListener('click',   () => exportShift(shift, 'csv'));
+    card.querySelector('.btn-delete-shift')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const dateStr = fmtDate(shift.closedAt);
+      if (!confirm(t('confirmDeleteShiftSingle', dateStr))) return;
+      history = history.filter(s => s.id !== shift.id);
+      selectedIds.delete(shift.id);
+      HistStorage.set('pos_shift_history', history);
+      renderList();
+      renderChart();
+      showAlert(t('alertShiftsDeleted'), 'success');
+    });
 
     list.appendChild(card);
   });
@@ -396,8 +414,35 @@ function renderList() {
   updateToolbar();
 }
 
+function fmtDuration(startISO, endISO) {
+  if (!startISO || !endISO) return null;
+  const ms = new Date(endISO) - new Date(startISO);
+  if (!isFinite(ms) || ms < 0) return null;
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function fmtShiftRange(startISO, endISO) {
+  const lang = LangManager.current === 'id' ? 'id-ID' : 'en-US';
+  const opts = { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' };
+  const s = startISO ? new Date(startISO).toLocaleString(lang, opts) : '—';
+  const e = new Date(endISO).toLocaleString(lang, opts);
+  return `${s} → ${e}`;
+}
+
 function renderDetail(shift) {
   const s = shift.summary || {};
+  const duration = fmtDuration(shift.startedAt, shift.closedAt);
+  const range    = fmtShiftRange(shift.startedAt, shift.closedAt);
+  // Flag long shifts (>24h) — likely forgot to close. Visual hint for audit.
+  const isLong   = duration && (new Date(shift.closedAt) - new Date(shift.startedAt)) > 24 * 3600000;
+  const durationBanner = `
+    <div class="shift-duration-banner ${isLong ? 'long' : ''}">
+      <i class="far fa-clock"></i> ${range}
+      ${duration ? `<span class="dur-pill ${isLong ? 'long' : ''}">${duration}</span>` : ''}
+      ${isLong ? `<span class="dur-warn"><i class="fas fa-exclamation-triangle"></i> &gt;24h</span>` : ''}
+    </div>`;
 
   const fmtDiff = (val) => {
     if (val === null || val === undefined) return `<span style="color:var(--gray)">—</span>`;
@@ -480,6 +525,7 @@ function renderDetail(shift) {
       </div>`;
 
   return `
+    ${durationBanner}
     <div class="detail-summary">
       <div class="detail-saldo-item">
         <div class="detail-saldo-label">${t('cashExpected')}</div>
@@ -502,6 +548,10 @@ function renderDetail(shift) {
       <button class="btn info btn-export-csv">
         <i class="fas fa-file-csv"></i> ${t('exportCsvBtn')}
       </button>
+      ${window._isAdmin ? `
+        <button class="btn danger btn-delete-shift" style="margin-left:auto" title="${t('deleteShift')}">
+          <i class="fas fa-trash"></i> ${t('deleteShift')}
+        </button>` : ''}
     </div>
     <div class="detail-table-wrap">
       <table>

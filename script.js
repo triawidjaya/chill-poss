@@ -860,9 +860,10 @@ class ChillPOS {
   }
 
   initEventListeners() {
-    // Help modal
-    document.getElementById('open-help').addEventListener('click', () => this.showHelp());
-    document.getElementById('close-help').addEventListener('click', () => this.hideHelp());
+    // Help modal — triggered from Welcome Wizard + Settings (removed from header)
+    document.getElementById('wizard-help').addEventListener('click',   () => this.showHelp());
+    document.getElementById('settings-help').addEventListener('click', () => this.showHelp());
+    document.getElementById('close-help').addEventListener('click',    () => this.hideHelp());
 
     // Header-actions toggle — single fixed button, swap eye icon based on state
     const toggleBtn = document.getElementById('toggle-header');
@@ -1923,9 +1924,14 @@ class ChillPOS {
     const transfer = this.calculateSaldo('Transfer');
     const qris     = this.calculateSaldo('Qris');
 
+    // startedAt sourced from the START BALANCE tx — it's always inserted at shift start.
+    // Legacy shifts without this field will render as "—" in history.
+    const startedAt = this.transactions.find(tx => tx.kategori === 'START BALANCE')?.tanggalWaktu ?? null;
+
     const shiftRecord = {
-      id:       `shift_${Date.now()}`,
-      closedAt: new Date().toISOString(),
+      id:        `shift_${Date.now()}`,
+      startedAt,
+      closedAt:  new Date().toISOString(),
       staff,
       summary: {
         cash, card, transfer, qris,
