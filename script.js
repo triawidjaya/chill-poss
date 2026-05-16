@@ -840,6 +840,9 @@ class ChillPOS {
       msPin:           document.getElementById('ms-pin'),
       msPinHint:       document.getElementById('ms-pin-hint'),
       msLogout:        document.getElementById('ms-logout'),
+      msSubtitle:      document.getElementById('ms-subtitle'),
+      msUseLast:       document.getElementById('ms-use-last'),
+      msAmountChips:   document.getElementById('ms-amount-chips'),
       // Close Shift modal
       tutupShiftModal:     document.getElementById('tutup-shift-modal'),
       tsStepInput:         document.getElementById('ts-step-input'),
@@ -937,6 +940,16 @@ class ChillPOS {
     this.elements.msStaff.addEventListener('change', () => this._refreshShiftPinHint());
     // Logout escape hatch — esp. for cashier whose PIN isn't set yet
     this.elements.msLogout.addEventListener('click', () => this.handleLogout());
+    // Quick-fill: use last shift's closing cash
+    this.elements.msUseLast.addEventListener('click', () => {
+      const amt = parseInt(this.elements.msUseLast.dataset.amount || '0', 10);
+      if (amt > 0) this._fillCashInput(amt);
+    });
+    // Amount chips — common preset amounts
+    this.elements.msAmountChips.addEventListener('click', (e) => {
+      const chip = e.target.closest('.amount-chip');
+      if (chip) this._fillCashInput(parseInt(chip.dataset.amount, 10));
+    });
 
     // Close Shift modal — format actual amounts
     const fmtInput = (inputEl, previewEl) => {
@@ -1150,8 +1163,42 @@ class ChillPOS {
     this.elements.msCash.dataset.raw        = '';
     this.elements.msCashPreview.textContent = '';
     this.elements.msPin.value               = '';
+    this._renderShiftSubtitle();
+    this._renderLastShiftButton();
     this._refreshShiftPinHint();
     this.elements.mulaiShiftModal.style.display = 'flex';
+  }
+
+  // Show current date/time as audit context — what day/time this shift opens.
+  _renderShiftSubtitle() {
+    const lang = LangManager.current === 'id' ? 'id-ID' : 'en-US';
+    const now  = new Date();
+    const dateStr = now.toLocaleDateString(lang, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const timeStr = now.toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' });
+    this.elements.msSubtitle.innerHTML = `<i class="far fa-calendar-alt"></i> ${dateStr} • ${timeStr}`;
+  }
+
+  // If previous shift exists, surface its closing cash as a one-click fill.
+  _renderLastShiftButton() {
+    const history = Storage.get('pos_shift_history', []);
+    const last    = history?.[0]; // saveShiftHistory prepends, so [0] = most recent
+    const lastCash = last?.summary?.actualCash ?? last?.summary?.cash ?? null;
+    const btn = this.elements.msUseLast;
+    if (lastCash !== null && lastCash > 0) {
+      btn.dataset.amount = String(lastCash);
+      btn.innerHTML = `<i class="fas fa-history"></i> ${t('useLastShiftCash', this.formatCurrency(lastCash))}`;
+      btn.style.display = '';
+    } else {
+      btn.style.display = 'none';
+    }
+  }
+
+  // Single point to programmatically set cash input (used by quick-fill + chips).
+  _fillCashInput(amount) {
+    const raw = String(Math.max(0, parseInt(amount, 10) || 0));
+    this.elements.msCash.dataset.raw       = raw;
+    this.elements.msCash.value             = this.formatNumber(Number(raw));
+    this.elements.msCashPreview.textContent = this.formatCurrency(Number(raw));
   }
 
   // Updates the PIN hint text based on currently selected Staff on Duty.
@@ -1763,7 +1810,8 @@ class ChillPOS {
       const sign  = val > 0 ? '+' : '';
       const cls   = val > 0 ? 'ts-diff-over' : 'ts-diff-short';
       const label = val > 0 ? t('over') : t('short');
-      return `<span class="${cls}">${sign}${this.formatCurrency(val)} ${label}</span>`;
+      // Two lines: amount on top, label below — keeps Difference column narrow.
+      return `<span class="${cls}"><span class="diff-amt">${sign}${this.formatCurrency(val)}</span><span class="diff-label">${label}</span></span>`;
     };
 
     const hasSelisih = selisihCash !== 0 || selisihCard !== 0 ||
@@ -1785,22 +1833,24 @@ class ChillPOS {
     this.elements.tsSummaryContent.innerHTML = `
       <div class="shift-summary">
         <h4>${t('shiftSummary')}</h4>
-        <table class="ts-summary-table">
-          <thead>
-            <tr>
-              <th>${t('method')}</th>
-              <th>${t('expected')}</th>
-              <th>${t('actual')}</th>
-              <th>${t('difference')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${row('fa-money-bill-wave', 'Cash',     expectedCash,     actualCash,     selisihCash)}
-            ${row('fa-credit-card',     'Card',     expectedCard,     actualCard,     selisihCard)}
-            ${row('fa-exchange-alt',    'Transfer', expectedTransfer, actualTransfer, selisihTransfer)}
-            ${row('fa-qrcode',          'QRIS',     expectedQris,     actualQris,     selisihQris)}
-          </tbody>
-        </table>
+        <div class="ts-table-wrap">
+          <table class="ts-summary-table">
+            <thead>
+              <tr>
+                <th>${t('method')}</th>
+                <th>${t('expected')}</th>
+                <th>${t('actual')}</th>
+                <th>${t('difference')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${row('fa-money-bill-wave', 'Cash',     expectedCash,     actualCash,     selisihCash)}
+              ${row('fa-credit-card',     'Card',     expectedCard,     actualCard,     selisihCard)}
+              ${row('fa-exchange-alt',    'Transfer', expectedTransfer, actualTransfer, selisihTransfer)}
+              ${row('fa-qrcode',          'QRIS',     expectedQris,     actualQris,     selisihQris)}
+            </tbody>
+          </table>
+        </div>
         <div class="total-summary">
           <span>${t('totalExpected')}</span>
           <span class="total-amount">${this.formatCurrency(expectedCash + expectedCard + expectedTransfer + expectedQris)}</span>

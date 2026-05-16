@@ -291,19 +291,29 @@
 <!-- Start Shift Modal -->
 <div class="modal" id="mulai-shift-modal">
   <div class="modal-content small">
-    <h2 style="margin-bottom:20px"><i class="fas fa-play-circle" style="color:var(--success)"></i> <span data-i18n="startShift">Start Shift</span></h2>
+    <h2 style="margin-bottom:6px"><i class="fas fa-play-circle" style="color:var(--success)"></i> <span data-i18n="startShift">Start Shift</span></h2>
+    <p class="modal-subtitle" id="ms-subtitle"></p>
     <form id="mulai-shift-form">
       <div class="form-group">
-        <label for="ms-staff" data-i18n="staffOnDuty">Staff on Duty</label>
+        <label for="ms-staff"><i class="fas fa-user-tie"></i> <span data-i18n="staffOnDuty">Staff on Duty</span></label>
         <select id="ms-staff" required></select>
       </div>
       <div class="form-group">
-        <label for="ms-cash" data-i18n="initialCashBalance">Initial Cash Balance</label>
-        <input type="text" id="ms-cash" inputmode="numeric" autocomplete="off" placeholder="0" required>
+        <label for="ms-cash"><i class="fas fa-money-bill-wave"></i> <span data-i18n="initialCashBalance">Initial Cash Balance</span></label>
+        <button type="button" class="last-shift-btn" id="ms-use-last" style="display:none"></button>
+        <input type="text" id="ms-cash" inputmode="numeric" autocomplete="off" placeholder="e.g. 500.000" data-i18n-ph="cashPlaceholder" required>
         <small id="ms-cash-preview" style="color:var(--gray);font-size:0.8rem;margin-top:4px;display:block"></small>
+        <small class="field-hint" data-i18n="cashHint">Physical cash currently in the till.</small>
+        <div class="amount-chips" id="ms-amount-chips">
+          <span class="chip-label" data-i18n="commonAmounts">Quick fill</span>
+          <button type="button" class="amount-chip" data-amount="100000">100K</button>
+          <button type="button" class="amount-chip" data-amount="200000">200K</button>
+          <button type="button" class="amount-chip" data-amount="500000">500K</button>
+          <button type="button" class="amount-chip" data-amount="1000000">1jt</button>
+        </div>
       </div>
       <div class="form-group" id="ms-pin-group">
-        <label for="ms-pin"><span data-i18n="pin">PIN</span> <span class="req-marker">*</span></label>
+        <label for="ms-pin"><i class="fas fa-key"></i> <span data-i18n="pin">PIN</span> <span class="req-marker">*</span></label>
         <input type="password" id="ms-pin" inputmode="numeric" autocomplete="off" placeholder="••••" maxlength="6">
         <small id="ms-pin-hint" style="font-size:0.78rem;margin-top:4px;display:block;color:var(--gray)"></small>
       </div>
@@ -391,7 +401,7 @@
 
 <!-- Close Shift Modal -->
 <div class="modal" id="tutup-shift-modal">
-  <div class="modal-content" style="max-width:520px;width:100%">
+  <div class="modal-content" style="max-width:640px;width:100%">
     <h2 style="margin-bottom:20px">
       <i class="fas fa-door-closed" style="color:var(--danger)"></i>
       <span data-i18n="closeShiftTitle">Close Shift</span>

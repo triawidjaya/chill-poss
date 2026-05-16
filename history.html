@@ -55,6 +55,22 @@
     .detail-table-wrap td{padding:6px 10px;border-bottom:1px solid var(--border-color)}
     .detail-table-wrap tr:last-child td{border-bottom:none}
     .detail-table-wrap tr:hover{background:rgba(0,0,0,0.03)}
+    .hs-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:16px}
+    .hs-actual-table{width:100%;border-collapse:collapse;font-size:0.85rem}
+    .hs-actual-table th{background:var(--primary);color:white;padding:7px 8px;text-align:left;font-weight:500;white-space:nowrap}
+    .hs-actual-table th.hs-num{text-align:right}
+    .hs-actual-table td{padding:7px 8px;border-bottom:1px solid var(--border-color);vertical-align:middle}
+    .hs-actual-table tr:last-child td{border-bottom:none}
+    .hs-method{white-space:nowrap}
+    .hs-num{text-align:right;white-space:nowrap}
+    .hs-actual{font-weight:600}
+    .hs-diff.exact{color:#007b46;font-weight:600;white-space:nowrap}
+    .hs-diff.over,.hs-diff.short{display:inline-flex;flex-direction:column;align-items:flex-end;line-height:1.15;font-weight:600}
+    .hs-diff.over{color:#17a2b8}
+    .hs-diff.short{color:#f72585}
+    .hs-diff-amt{white-space:nowrap}
+    .hs-diff-label{font-size:0.7rem;font-weight:500;opacity:0.85}
+    @media(max-width:520px){.hs-actual-table{font-size:0.78rem}.hs-actual-table th,.hs-actual-table td{padding:6px 6px}}
     @media(max-width:600px){.shift-card-badges{display:none}.history-toolbar{flex-direction:column;align-items:flex-start}.history-header{flex-direction:column;align-items:flex-start;gap:12px}}
   </style>
 </head>
@@ -385,11 +401,12 @@ function renderDetail(shift) {
 
   const fmtDiff = (val) => {
     if (val === null || val === undefined) return `<span style="color:var(--gray)">—</span>`;
-    if (val === 0) return `<span style="color:#007b46;font-weight:600">${t('exact')}</span>`;
-    const sign  = val > 0 ? '+' : '';
-    const color = val > 0 ? '#17a2b8' : '#f72585';
+    if (val === 0) return `<span class="hs-diff exact">${t('exact')}</span>`;
+    const sign = val > 0 ? '+' : '';
+    const cls  = val > 0 ? 'hs-diff over' : 'hs-diff short';
     const label = val > 0 ? t('over') : t('short');
-    return `<span style="color:${color};font-weight:600">${sign}${fmt(val)} ${label}</span>`;
+    // Stacked: amount on top, label below — keeps Difference column narrow.
+    return `<span class="${cls}"><span class="hs-diff-amt">${sign}${fmt(val)}</span><span class="hs-diff-label">${label}</span></span>`;
   };
 
   const hasActual = s.actualCash !== null && s.actualCash !== undefined;
@@ -398,30 +415,32 @@ function renderDetail(shift) {
   const hasActualQris     = s.actualQris     !== null && s.actualQris     !== undefined;
 
   const actualRow = (icon, label, expected, actual, selisih) => `
-    <tr style="border-bottom:1px solid var(--border-color)">
-      <td style="padding:7px 10px">${icon} ${label}</td>
-      <td style="padding:7px 10px;text-align:right">${fmt(expected || 0)}</td>
-      <td style="padding:7px 10px;text-align:right;font-weight:600">${fmt(actual)}</td>
-      <td style="padding:7px 10px;text-align:right">${fmtDiff(selisih)}</td>
+    <tr>
+      <td class="hs-method">${icon} ${label}</td>
+      <td class="hs-num">${fmt(expected || 0)}</td>
+      <td class="hs-num hs-actual">${fmt(actual)}</td>
+      <td class="hs-num">${fmtDiff(selisih)}</td>
     </tr>`;
 
   const actualSection = hasActual ? `
-    <table style="width:100%;border-collapse:collapse;font-size:0.85rem;margin-bottom:16px">
-      <thead>
-        <tr>
-          <th style="background:var(--primary);color:white;padding:7px 10px;text-align:left">${t('method')}</th>
-          <th style="background:var(--primary);color:white;padding:7px 10px;text-align:right">${t('expected')}</th>
-          <th style="background:var(--primary);color:white;padding:7px 10px;text-align:right">${t('actual')}</th>
-          <th style="background:var(--primary);color:white;padding:7px 10px;text-align:right">${t('difference')}</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${actualRow('💵', 'Cash', s.cash, s.actualCash, s.selisihCash)}
-        ${actualRow('💳', 'Card', s.card, s.actualCard, s.selisihCard)}
-        ${hasActualTransfer ? actualRow('🔄', 'Transfer', s.transfer, s.actualTransfer, s.selisihTransfer) : ''}
-        ${hasActualQris     ? actualRow('📱', 'QRIS',     s.qris,     s.actualQris,     s.selisihQris)     : ''}
-      </tbody>
-    </table>
+    <div class="hs-table-wrap">
+      <table class="hs-actual-table">
+        <thead>
+          <tr>
+            <th>${t('method')}</th>
+            <th class="hs-num">${t('expected')}</th>
+            <th class="hs-num">${t('actual')}</th>
+            <th class="hs-num">${t('difference')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${actualRow('💵', 'Cash', s.cash, s.actualCash, s.selisihCash)}
+          ${actualRow('💳', 'Card', s.card, s.actualCard, s.selisihCard)}
+          ${hasActualTransfer ? actualRow('🔄', 'Transfer', s.transfer, s.actualTransfer, s.selisihTransfer) : ''}
+          ${hasActualQris     ? actualRow('📱', 'QRIS',     s.qris,     s.actualQris,     s.selisihQris)     : ''}
+        </tbody>
+      </table>
+    </div>
     ${s.closingNote ? `
       <div style="background:var(--card-bg);border-left:3px solid var(--primary);padding:10px 12px;margin-bottom:16px;border-radius:4px;font-size:0.85rem">
         <strong>${t('closingNote')}:</strong> ${escapeHtml(s.closingNote)}
