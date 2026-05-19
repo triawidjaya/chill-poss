@@ -156,9 +156,10 @@ const DataStore = {
   users:        [],
   session:      null,          // { userId, loginAt } | null
   settings: {
-    brand:       'My Business',
-    lang:        'en',
-    shiftActive: false,
+    brand:           'My Business',
+    lang:            'en',
+    shiftActive:     false,
+    adminCategories: [],   // category names that require admin PIN to record
   },
 
   _listeners: {
@@ -183,9 +184,10 @@ const DataStore = {
     this.categories.length   = 0;
     this.users.length        = 0;
     this.session             = null;
-    this.settings.brand      = 'My Business';
-    this.settings.lang       = 'en';
-    this.settings.shiftActive = false;
+    this.settings.brand           = 'My Business';
+    this.settings.lang            = 'en';
+    this.settings.shiftActive     = false;
+    this.settings.adminCategories = [];
     this.hydrated = false;
   },
 
@@ -204,9 +206,10 @@ const DataStore = {
     this.users.length = 0;
     (_lsGet('pos_users', []) || []).forEach(u => this.users.push(u));
     this.session = _lsGet('pos_session', null);
-    this.settings.brand       = _lsGet('pos_brand',        'My Business');
-    this.settings.lang        = _lsGet('pos_lang',         'en');
-    this.settings.shiftActive = _lsGet('pos_shift_active', false);
+    this.settings.brand           = _lsGet('pos_brand',             'My Business');
+    this.settings.lang            = _lsGet('pos_lang',              'en');
+    this.settings.shiftActive     = _lsGet('pos_shift_active',      false);
+    this.settings.adminCategories = _lsGet('pos_admin_categories',  []);
     this.hydrated = true;
   },
 
@@ -242,9 +245,10 @@ const DataStore = {
 
     const map = {};
     (setRes.data || []).forEach(row => { map[row.key] = row.value; });
-    this.settings.brand       = map.brand        ?? 'My Business';
-    this.settings.lang        = map.lang         ?? 'en';
-    this.settings.shiftActive = map.shift_active ?? false;
+    this.settings.brand           = map.brand            ?? 'My Business';
+    this.settings.lang            = map.lang             ?? 'en';
+    this.settings.shiftActive     = map.shift_active     ?? false;
+    this.settings.adminCategories = map.admin_categories ?? [];
 
     this.hydrated = true;
   },
@@ -328,9 +332,10 @@ const DataStore = {
   _onSettingsChange(p) {
     if (p.eventType === 'DELETE') return;
     const { key, value } = p.new;
-    if      (key === 'brand')        this.settings.brand       = value;
-    else if (key === 'lang')         this.settings.lang        = value;
-    else if (key === 'shift_active') this.settings.shiftActive = value;
+    if      (key === 'brand')            this.settings.brand           = value;
+    else if (key === 'lang')             this.settings.lang            = value;
+    else if (key === 'shift_active')     this.settings.shiftActive     = value;
+    else if (key === 'admin_categories') this.settings.adminCategories = value;
     this._fire('settings');
   },
 
@@ -558,17 +563,19 @@ const DataStore = {
   // ── Settings ──
   async saveSetting(key, value) {
     if (this.isLocal()) {
-      if      (key === 'brand')        { this.settings.brand       = value; _lsSet('pos_brand',        value); }
-      else if (key === 'lang')         { this.settings.lang        = value; _lsSet('pos_lang',         value); }
-      else if (key === 'shift_active') { this.settings.shiftActive = value; _lsSet('pos_shift_active', value); }
+      if      (key === 'brand')            { this.settings.brand           = value; _lsSet('pos_brand',             value); }
+      else if (key === 'lang')             { this.settings.lang            = value; _lsSet('pos_lang',              value); }
+      else if (key === 'shift_active')     { this.settings.shiftActive     = value; _lsSet('pos_shift_active',      value); }
+      else if (key === 'admin_categories') { this.settings.adminCategories = value; _lsSet('pos_admin_categories',  value); }
       this._fire('settings');
       return;
     }
     const { error } = await getSupabase().from('pos_settings').upsert({ key, value });
     if (error) throw error;
-    if      (key === 'brand')        this.settings.brand       = value;
-    else if (key === 'lang')         this.settings.lang        = value;
-    else if (key === 'shift_active') this.settings.shiftActive = value;
+    if      (key === 'brand')            this.settings.brand           = value;
+    else if (key === 'lang')             this.settings.lang            = value;
+    else if (key === 'shift_active')     this.settings.shiftActive     = value;
+    else if (key === 'admin_categories') this.settings.adminCategories = value;
   },
 };
 
@@ -588,7 +595,8 @@ const LOCAL_ONLY_KEYS = new Set([
   'pos_access_granted',
   'pos_staff',          // derived from users; cached locally for legacy callers
   'pos_migrated_v1',
-  'pos_session',        // per-device session — see AuthStorage below
+  'pos_session',          // per-device session — see AuthStorage below
+  'pos_admin_categories', // local-mode mirror of settings.admin_categories
   SB_CONFIG_KEY,
 ]);
 

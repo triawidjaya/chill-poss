@@ -489,6 +489,19 @@
         <label for="f-keterangan" data-i18n="note">Note (Optional)</label>
         <input type="text" id="f-keterangan" maxlength="100">
       </div>
+      <div id="f-admin-auth" class="form-group full-width" style="display:none;background:rgba(245,158,11,0.08);border:1px dashed #f59e0b;border-radius:6px;padding:10px">
+        <label style="color:#92400e;font-weight:600;display:block;margin-bottom:6px">
+          <i class="fas fa-shield-halved"></i> <span data-i18n="adminApprovalRequired">Admin approval required</span>
+        </label>
+        <div style="display:flex;gap:8px">
+          <select id="f-auth-admin" style="flex:1" required></select>
+          <input type="password" id="f-auth-pin" inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6"
+                 placeholder="Admin PIN" autocomplete="off" style="flex:1" required>
+        </div>
+        <small style="color:var(--gray);font-size:0.75rem;margin-top:4px;display:block" data-i18n="adminApprovalHint">
+          This category requires an admin to approve. Pick an admin and enter their PIN.
+        </small>
+      </div>
       <div class="form-actions">
         <button type="button" class="btn" id="form-batal">
           <i class="fas fa-times"></i> <span data-i18n="cancel">Cancel</span>
@@ -582,6 +595,13 @@
               style="margin-top:10px;width:100%;justify-content:center">
         <i class="fas fa-plus"></i> <span data-i18n="addCategory">Add Category</span>
       </button>
+    </div>
+    <div class="form-group">
+      <label data-i18n="adminCategoriesLabel">Categories that require admin approval</label>
+      <div id="settings-admin-cats" class="cat-list" style="max-height:160px;overflow-y:auto"></div>
+      <small style="color:var(--gray);font-size:0.75rem;display:block;margin-top:4px" data-i18n="adminCategoriesHint">
+        Cashier must enter an admin PIN to record transactions in checked categories.
+      </small>
     </div>
     <div class="form-group">
       <label for="settings-staff" data-i18n="staffViewOnly">Staff (managed via Manage Users — view only)</label>

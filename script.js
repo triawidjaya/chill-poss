@@ -1043,6 +1043,8 @@ class ChillPOS {
 
     // Transaction form submit + type toggle + cancel
     this.elements.transaksiForm.addEventListener('submit', async (e) => { e.preventDefault(); await this.simpanTransaksi(); });
+    // Show/hide admin approval section when the picked category changes.
+    this.elements.fKategori.addEventListener('change', () => this._updateAdminAuthVisibility());
     this.elements.transaksiForm.querySelectorAll('.type-btn').forEach(btn => {
       btn.addEventListener('click', () => this.setActiveType(btn.dataset.type));
     });
@@ -1683,6 +1685,39 @@ class ChillPOS {
     this.elements.fJumlah.dataset.raw     = rawJumlah || '';
     this.elements.fJumlah.value           = rawJumlah ? this.formatNumber(rawJumlah) : '';
     this.elements.fJumlahPrev.textContent = rawJumlah ? this.formatCurrency(rawJumlah) : '';
+
+    // Reset admin auth fields + apply visibility based on current category + user role.
+    document.getElementById('f-auth-pin').value = '';
+    this._updateAdminAuthVisibility();
+  }
+
+  // Show admin-PIN approval section iff the picked category is in the admin
+  // list AND the signed-in user is not an admin themselves.
+  _updateAdminAuthVisibility() {
+    const section = document.getElementById('f-admin-auth');
+    if (!section) return;
+    const cat = this.elements.fKategori?.value;
+    const adminCats = DataStore.settings.adminCategories || [];
+    const cur = Auth.currentUser();
+    const needsApproval = adminCats.includes(cat) && cur?.role !== 'admin';
+    section.style.display = needsApproval ? '' : 'none';
+
+    const adminSel = document.getElementById('f-auth-admin');
+    const pinIn    = document.getElementById('f-auth-pin');
+    adminSel.required = needsApproval;
+    pinIn.required    = needsApproval;
+
+    if (needsApproval) {
+      // Refresh admin dropdown — only admins with a PIN set can authorize.
+      adminSel.innerHTML = '';
+      DataStore.users
+        .filter(u => u.role === 'admin' && u.pinHash)
+        .forEach(u => {
+          const opt = document.createElement('option');
+          opt.value = u.id; opt.textContent = u.username;
+          adminSel.appendChild(opt);
+        });
+    }
   }
 
   // ============================================================
@@ -1773,9 +1808,29 @@ class ChillPOS {
     document.getElementById('open-upgrade-cloud').style.display =
       (DataStore.isLocal() && Auth.can(PERMISSIONS.MANAGE_SETTINGS)) ? '' : 'none';
     this.renderCategoriesList();
+    this.renderAdminCategoriesList();
     this.elements.settingsBrand.value = this.brandName;
     this.elements.settingsStaff.value = this.staffList.join('\n');   // view-only mirror
     this.elements.settingsModal.style.display = 'flex';
+  }
+
+  // Render checkboxes for each non-system category. Checked = requires admin PIN
+  // when a cashier picks it in the transaction form.
+  renderAdminCategoriesList() {
+    const list = document.getElementById('settings-admin-cats');
+    list.innerHTML = '';
+    const checked = new Set(DataStore.settings.adminCategories || []);
+    this.categories.filter(c => !SYSTEM_CATEGORIES.includes(c)).forEach(cat => {
+      const row = document.createElement('label');
+      row.className = 'cat-row';
+      row.style.cursor = 'pointer';
+      row.innerHTML = `
+        <input type="checkbox" class="admin-cat-toggle" value="${this.escapeHtml(cat)}"
+               ${checked.has(cat) ? 'checked' : ''} style="margin-right:8px;width:16px;height:16px;cursor:pointer;accent-color:#f59e0b">
+        <span class="cat-name">${this.escapeHtml(cat)}</span>
+      `;
+      list.appendChild(row);
+    });
   }
 
   // Open the Local→Cloud migration modal.
@@ -1851,6 +1906,13 @@ class ChillPOS {
     this.brandName = brand || DEFAULT_BRAND;
     Storage.set('pos_brand',      this.brandName);
     Storage.set('pos_categories', this.categories);
+
+    // Collect checked admin-required categories and persist as a settings row.
+    const adminCats = [...document.querySelectorAll('.admin-cat-toggle:checked')]
+      .map(el => el.value);
+    DataStore.saveSetting('admin_categories', adminCats).catch(e =>
+      console.error('[Settings] admin_categories save failed:', e));
+
     this.renderBrandName();
     this.hideSettings();
     this.showAlert(t('alertSettingsSaved'), 'success');
@@ -1875,11 +1937,30 @@ class ChillPOS {
     const deskripsi  = this.elements.fDeskripsi.value.trim();
     let jumlah       = parseFloat(this.elements.fJumlah.dataset.raw || this.elements.fJumlah.value.replace(/\D/g, ''));
     const metode     = this.elements.fMetode.value;
-    const keterangan = this.elements.fKeterangan.value.trim();
+    let   keterangan = this.elements.fKeterangan.value.trim();
     const staff      = this.elements.fStaff.value;
 
     if (!deskripsi || isNaN(jumlah) || jumlah <= 0) {
       this.showAlert(t('alertFillForm'), 'error'); return;
+    }
+
+    // Admin-approval gate: if the picked category requires approval AND
+    // current user isn't an admin, verify the picked admin's PIN.
+    const adminCats = DataStore.settings.adminCategories || [];
+    const cur       = Auth.currentUser();
+    if (adminCats.includes(kategori) && cur?.role !== 'admin') {
+      const adminId  = document.getElementById('f-auth-admin').value;
+      const adminPin = document.getElementById('f-auth-pin').value;
+      const admin    = DataStore.users.find(u => u.id === adminId && u.role === 'admin');
+      if (!admin || !(await Auth.verifyPin(admin, adminPin))) {
+        this.showAlert(t('wrongAdminPin'), 'error');
+        document.getElementById('f-auth-pin').value = '';
+        document.getElementById('f-auth-pin').focus();
+        return;
+      }
+      // Stamp authorization into keterangan so the audit shows in History/Excel.
+      const stamp = `[approved by ${admin.username}]`;
+      keterangan = keterangan ? `${stamp} ${keterangan}` : stamp;
     }
 
     // Loading state — disable save button, show spinner

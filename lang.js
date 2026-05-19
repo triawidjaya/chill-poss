@@ -214,6 +214,12 @@ const STRINGS = {
     upgradeDone:'Migration complete! Reloading...',
     upgradeFailed:'Migration failed',
     upgradeCloudNotEmpty:'The target Supabase project is not empty. Use a freshly-created project to avoid overwriting data.',
+    // ── Admin approval categories ──
+    adminApprovalRequired:'Admin approval required',
+    adminApprovalHint:'This category requires an admin to approve. Pick an admin and enter their PIN.',
+    adminCategoriesLabel:'Categories that require admin approval',
+    adminCategoriesHint:'Cashier must enter an admin PIN to record transactions in checked categories.',
+    wrongAdminPin:'Wrong admin PIN. Transaction not saved.',
     // ── Supabase / cloud sync ──
     sbSetupTitle:'Connect to Cloud',
     sbSetupHint:'Paste your Supabase Project URL and Publishable Key. Same URL + key on every device = shared data.',
@@ -407,6 +413,12 @@ const STRINGS = {
     upgradeDone:'Migrasi selesai! Reloading...',
     upgradeFailed:'Migrasi gagal',
     upgradeCloudNotEmpty:'Project Supabase tujuan tidak kosong. Pakai project baru supaya tidak overwrite data.',
+    // ── Admin approval categories ──
+    adminApprovalRequired:'Butuh persetujuan admin',
+    adminApprovalHint:'Kategori ini butuh approval admin. Pilih admin dan masukkan PIN-nya.',
+    adminCategoriesLabel:'Kategori yang butuh persetujuan admin',
+    adminCategoriesHint:'Kasir harus masukkan PIN admin untuk catat transaksi di kategori yang dicentang.',
+    wrongAdminPin:'PIN admin salah. Transaksi tidak disimpan.',
     // ── Supabase / cloud sync ──
     sbSetupTitle:'Hubungkan ke Cloud',
     sbSetupHint:'Paste URL Project Supabase dan Publishable Key. URL + key sama di tiap device = data sharing.',
