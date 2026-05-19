@@ -1691,15 +1691,27 @@ class ChillPOS {
     this._updateAdminAuthVisibility();
   }
 
-  // Show admin-PIN approval section iff the picked category is in the admin
-  // list AND the signed-in user is not an admin themselves.
+  // Returns true when the current form state requires an admin PIN, in two cases:
+  //   1. The picked category is in admin_categories.
+  //   2. Editing a transaction whose original note carries an "[approved by ...]"
+  //      tag — so cashiers can't bypass approval by switching the category or
+  //      tweaking the amount after the fact.
+  // Admin users never see the prompt (they authenticated at login).
+  _txNeedsApproval(category, editId) {
+    if (Auth.currentUser()?.role === 'admin') return false;
+    const adminCats = DataStore.settings.adminCategories || [];
+    if (adminCats.includes(category)) return true;
+    if (editId) {
+      const orig = this.transactions.find(t => t.id === editId);
+      if (orig && /\[approved by /i.test(orig.keterangan || '')) return true;
+    }
+    return false;
+  }
+
   _updateAdminAuthVisibility() {
     const section = document.getElementById('f-admin-auth');
     if (!section) return;
-    const cat = this.elements.fKategori?.value;
-    const adminCats = DataStore.settings.adminCategories || [];
-    const cur = Auth.currentUser();
-    const needsApproval = adminCats.includes(cat) && cur?.role !== 'admin';
+    const needsApproval = this._txNeedsApproval(this.elements.fKategori?.value, this.currentEditId);
     section.style.display = needsApproval ? '' : 'none';
 
     const adminSel = document.getElementById('f-auth-admin');
@@ -1937,18 +1949,20 @@ class ChillPOS {
     const deskripsi  = this.elements.fDeskripsi.value.trim();
     let jumlah       = parseFloat(this.elements.fJumlah.dataset.raw || this.elements.fJumlah.value.replace(/\D/g, ''));
     const metode     = this.elements.fMetode.value;
-    let   keterangan = this.elements.fKeterangan.value.trim();
+    // Strip any existing "[approved by ...]" tag from the note so we don't
+    // accumulate stamps over repeated edits — we'll re-stamp below if needed.
+    let   keterangan = this.elements.fKeterangan.value.trim()
+                         .replace(/\[approved by [^\]]+\]\s*/gi, '').trim();
     const staff      = this.elements.fStaff.value;
 
     if (!deskripsi || isNaN(jumlah) || jumlah <= 0) {
       this.showAlert(t('alertFillForm'), 'error'); return;
     }
 
-    // Admin-approval gate: if the picked category requires approval AND
-    // current user isn't an admin, verify the picked admin's PIN.
-    const adminCats = DataStore.settings.adminCategories || [];
-    const cur       = Auth.currentUser();
-    if (adminCats.includes(kategori) && cur?.role !== 'admin') {
+    // Admin-approval gate. _txNeedsApproval also flags edits of
+    // previously-approved transactions, so cashiers can't bypass by switching
+    // the category to a non-sensitive one or tweaking the amount.
+    if (this._txNeedsApproval(kategori, this.currentEditId)) {
       const adminId  = document.getElementById('f-auth-admin').value;
       const adminPin = document.getElementById('f-auth-pin').value;
       const admin    = DataStore.users.find(u => u.id === adminId && u.role === 'admin');
@@ -1958,7 +1972,6 @@ class ChillPOS {
         document.getElementById('f-auth-pin').focus();
         return;
       }
-      // Stamp authorization into keterangan so the audit shows in History/Excel.
       const stamp = `[approved by ${admin.username}]`;
       keterangan = keterangan ? `${stamp} ${keterangan}` : stamp;
     }
