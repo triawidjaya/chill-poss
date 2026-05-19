@@ -198,6 +198,9 @@ const STRINGS = {
     systemBadge:'system',
     renameUserPrompt:'New username:',
     // ── Supabase / cloud sync ──
+    sbSetupTitle:'Connect to Cloud',
+    sbSetupHint:'Paste your Supabase Project URL and Publishable Key. Same URL + key on every device = shared data.',
+    sbSetupConnect:'Connect',
     supabaseSection:'Cloud Backend (Supabase)',
     supabaseHint:'Get these from your Supabase project: Settings → Data API (URL) and API Keys (Publishable key).',
     supabaseUrl:'Supabase Project URL',
@@ -371,6 +374,9 @@ const STRINGS = {
     systemBadge:'sistem',
     renameUserPrompt:'Nama pengguna baru:',
     // ── Supabase / cloud sync ──
+    sbSetupTitle:'Hubungkan ke Cloud',
+    sbSetupHint:'Paste URL Project Supabase dan Publishable Key. URL + key sama di tiap device = data sharing.',
+    sbSetupConnect:'Hubungkan',
     supabaseSection:'Backend Cloud (Supabase)',
     supabaseHint:'Ambil dari project Supabase: Settings → Data API (URL) dan API Keys (Publishable key).',
     supabaseUrl:'URL Project Supabase',

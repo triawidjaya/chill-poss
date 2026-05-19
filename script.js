@@ -276,8 +276,8 @@ class ChillPOS {
       return;
     }
     if (!SupabaseConfig.load()) {
-      // No cloud config yet — wizard will collect URL + key.
-      this.showFirstRunWizard();
+      // Dedicated cloud-pairing modal. After connect, bootstrap() runs again.
+      this.showSupabaseSetupModal();
       return;
     }
     try {
@@ -291,6 +291,48 @@ class ChillPOS {
     this._registerRealtimeListeners();
     this.renderAll();
     await this.bootstrapAuth();
+  }
+
+  // Show the dedicated cloud-pairing modal. On submit: validate, save config,
+  // hydrate, then continue via bootstrap() which will route to the right next
+  // step (first-run wizard if brand is default, otherwise login / setup-admin).
+  showSupabaseSetupModal() {
+    const modal = document.getElementById('sb-setup-modal');
+    const form  = document.getElementById('sb-setup-form');
+    const btn   = document.getElementById('sb-setup-submit');
+    document.getElementById('sb-setup-url').value = '';
+    document.getElementById('sb-setup-key').value = '';
+    modal.style.display = 'flex';
+    setTimeout(() => document.getElementById('sb-setup-url').focus(), 50);
+
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const url = document.getElementById('sb-setup-url').value;
+      const key = document.getElementById('sb-setup-key').value;
+      if (!SupabaseConfig.isValidUrl(url)) { this.showAlert(t('invalidSupabaseUrl'), 'error'); return; }
+      if (!SupabaseConfig.isValidKey(key)) { this.showAlert(t('invalidSupabaseKey'), 'error'); return; }
+      const originalHTML = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+      try {
+        SupabaseConfig.save(url, key);
+        await DataStore.hydrate();
+      } catch (err) {
+        SupabaseConfig.clear();
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+        this.showAlert(`${t('sbErrorHint')} (${err?.message || err})`, 'error');
+        return;
+      }
+      this._bindDataStore();
+      DataStore.subscribeRealtime();
+      this._registerRealtimeListeners();
+      modal.style.display = 'none';
+      btn.disabled = false;
+      btn.innerHTML = originalHTML;
+      this.renderAll();
+      await this.bootstrapAuth();
+    };
   }
 
   // Bind in-memory references to DataStore arrays so they stay in sync
@@ -808,23 +850,6 @@ class ChillPOS {
     document.getElementById('fr-admin-pin').value  = '';
     document.getElementById('fr-admin-pin2').value = '';
     this._refreshAdminNameDropdown();
-
-    // Show Supabase fields only if config not yet saved (first deployment).
-    const sbSection = document.getElementById('fr-supabase-section');
-    const sbUrl     = document.getElementById('fr-sb-url');
-    const sbKey     = document.getElementById('fr-sb-key');
-    if (SupabaseConfig.load()) {
-      sbSection.style.display = 'none';
-      sbUrl.required = false;
-      sbKey.required = false;
-    } else {
-      sbSection.style.display = '';
-      sbUrl.value = '';
-      sbKey.value = '';
-      sbUrl.required = true;
-      sbKey.required = true;
-    }
-
     document.getElementById('first-run-modal').style.display = 'flex';
   }
 
@@ -863,25 +888,6 @@ class ChillPOS {
     if (pin !== pin2)           { this.showAlert(t('pinMismatch'), 'error'); return; }
 
     if (!cats.includes('START BALANCE')) cats.unshift('START BALANCE');
-
-    // If Supabase not yet configured, save config + hydrate before continuing.
-    if (!SupabaseConfig.load()) {
-      const sbUrl = document.getElementById('fr-sb-url').value.trim();
-      const sbKey = document.getElementById('fr-sb-key').value.trim();
-      if (!SupabaseConfig.isValidUrl(sbUrl)) { this.showAlert(t('invalidSupabaseUrl'), 'error'); return; }
-      if (!SupabaseConfig.isValidKey(sbKey)) { this.showAlert(t('invalidSupabaseKey'), 'error'); return; }
-      try {
-        SupabaseConfig.save(sbUrl, sbKey);
-        await DataStore.hydrate();
-        this._bindDataStore();
-        DataStore.subscribeRealtime();
-        this._registerRealtimeListeners();
-      } catch (e) {
-        SupabaseConfig.clear();
-        this.showAlert(`${t('sbErrorHint')} (${e?.message || e})`, 'error');
-        return;
-      }
-    }
 
     // Persist business setup. Brand + categories awaited so we know they're
     // durable before creating users (which is the point of no return).
