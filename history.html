@@ -79,6 +79,11 @@
     .hs-diff-label{font-size:0.7rem;font-weight:500;opacity:0.85}
     @media(max-width:520px){.hs-actual-table{font-size:0.78rem}.hs-actual-table th,.hs-actual-table td{padding:6px 6px}}
     @media(max-width:600px){.shift-card-badges{display:none}.history-toolbar{flex-direction:column;align-items:flex-start}.history-header{flex-direction:column;align-items:flex-start;gap:12px}}
+    @media(max-width:600px){
+      .detail-actions .btn-label{display:none}
+      .detail-actions .btn{padding:8px 14px;min-width:44px;justify-content:center}
+      .detail-actions .btn i{margin:0}
+    }
   </style>
 </head>
 <body>
@@ -542,15 +547,15 @@ function renderDetail(shift) {
     </div>
     ${actualSection}
     <div class="detail-actions">
-      <button class="btn success btn-export-excel">
-        <i class="fas fa-file-excel"></i> ${t('exportExcelBtn')}
+      <button class="btn success btn-export-excel" title="${t('exportExcelBtn')}">
+        <i class="fas fa-file-excel"></i> <span class="btn-label">${t('exportExcelBtn')}</span>
       </button>
-      <button class="btn info btn-export-csv">
-        <i class="fas fa-file-csv"></i> ${t('exportCsvBtn')}
+      <button class="btn info btn-export-csv" title="${t('exportCsvBtn')}">
+        <i class="fas fa-file-csv"></i> <span class="btn-label">${t('exportCsvBtn')}</span>
       </button>
       ${window._isAdmin ? `
         <button class="btn danger btn-delete-shift" style="margin-left:auto" title="${t('deleteShift')}">
-          <i class="fas fa-trash"></i> ${t('deleteShift')}
+          <i class="fas fa-trash"></i> <span class="btn-label">${t('deleteShift')}</span>
         </button>` : ''}
     </div>
     <div class="detail-table-wrap">
