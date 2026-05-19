@@ -4,6 +4,12 @@ Panduan setup backend Supabase untuk 1 usaha yang menggunakan CHILL POS APP.
 
 **Konsep:** Tiap usaha punya 1 Supabase project sendiri (data 100% terisolasi). Code app sama untuk semua usaha (di GitHub repo kamu).
 
+> **Versi:** 1.1 — disesuaikan dengan CHILL POS APP terbaru:
+> - Per-method shift breakdown (Cash, Card, Transfer, QRIS)
+> - Closing note per shift (wajib jika ada selisih)
+> - Shift duration tracking via `started_at` + `closed_at`
+> - AccessGate adapter pattern untuk PIN reset (siap migrate ke Supabase Auth)
+
 ---
 
 ## 📋 Prerequisites
@@ -27,45 +33,50 @@ Panduan setup backend Supabase untuk 1 usaha yang menggunakan CHILL POS APP.
 
 ---
 
-## 🗄️ Step 2 — Jalankan Schema SQL
+## 🗄️ Step 2 — Run Schema SQL
 
-1. Di sidebar kiri Supabase, klik **"SQL Editor"**
-2. Klik **"New query"**
-3. **Copy-paste SELURUH** SQL di bawah ini, lalu klik **"Run"** (atau tekan Ctrl+Enter):
+Buka **SQL Editor** di sidebar Supabase. Schema dibagi jadi 4 blok independen — bisa dijalankan terpisah untuk debugging, atau gabungan di section "**Combined SQL**" di bawah untuk one-shot setup.
+
+> 💡 **Tip:** kalau mau setup ulang dari awal, jalankan dulu blok "Reset" di Troubleshooting → baru jalankan schema baru.
+
+---
+
+### 2.1 — Create Tables
+
+**What this does (English):**
+Creates the six core tables that mirror the localStorage keys used by CHILL POS APP:
+
+- **`pos_users`** — User accounts with hashed PINs and role (`admin` / `cashier`). The `pin_hash` column uses the format `sha256:<salt>:<hash>` produced by the client's `Auth._buildPinHash()`. `NULL` means the user can sign in by selecting their name without a PIN (cashier convenience for low-security tills).
+- **`pos_categories`** — Transaction categories. `is_system = TRUE` flags categories that the UI prevents from being renamed/deleted (currently only `START BALANCE`, required by the shift-start logic).
+- **`pos_transactions`** — Transactions belonging to the **currently active shift only**. When a shift is closed, every row is snapshotted into `pos_shifts.transactions` and this table is truncated. Two indexes optimize the dashboard sort (`tanggal_waktu DESC`) and the income/outgoing filter.
+- **`pos_shifts`** — Closed shift records (capped to 50 latest by the client). The `summary` JSONB holds the full per-method breakdown — see schema comment for the exact shape. The `started_at` column (added in v1.1) tracks when the shift began, sourced from the first `START BALANCE` transaction at close time; legacy shifts written before this column may be `NULL`.
+- **`pos_settings`** — Key/value singleton store for app-wide preferences (`brand`, `lang`, `shift_active`).
+- **`pos_session`** — Single-row table tracking which user is currently signed in. Realtime updates on this row let other devices detect a remote sign-out and force-logout.
+
+**SQL to paste:**
 
 ```sql
--- ============================================================
--- CHILL POS APP — Database Schema
--- Run this in Supabase SQL Editor on a fresh project.
--- ============================================================
-
--- ── Users (replaces localStorage pos_users) ──
+-- ── Users ──
 CREATE TABLE pos_users (
   id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   username    TEXT        UNIQUE NOT NULL,
-  pin_hash    TEXT,                                          -- nullable: 'sha256:<salt>:<hash>' or null (no PIN)
+  pin_hash    TEXT,                                          -- nullable. Format: 'sha256:<salt>:<hash>'. NULL = sign-in without PIN.
   role        TEXT        NOT NULL CHECK (role IN ('admin','cashier')),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ── Categories (replaces localStorage pos_categories) ──
+-- ── Categories ──
 CREATE TABLE pos_categories (
   id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   name        TEXT        UNIQUE NOT NULL,
   sort_order  INT         NOT NULL DEFAULT 0,
-  is_system   BOOLEAN     NOT NULL DEFAULT FALSE,             -- TRUE = START BALANCE (cannot delete)
+  is_system   BOOLEAN     NOT NULL DEFAULT FALSE,             -- TRUE = required by app logic (e.g. START BALANCE), cannot be deleted via UI.
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Seed default categories
-INSERT INTO pos_categories (name, sort_order, is_system) VALUES
-  ('START BALANCE', 0, TRUE),
-  ('Sales',         1, FALSE),
-  ('Refund',        2, FALSE),
-  ('Expense',       3, FALSE),
-  ('Other',         4, FALSE);
-
--- ── Active shift transactions (replaces localStorage pos_transactions) ──
+-- ── Active-shift transactions ──
+-- Truncated when a shift is closed; the closed shift's transactions
+-- are deep-copied into pos_shifts.transactions (JSONB) at close time.
 CREATE TABLE pos_transactions (
   id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   jenis           TEXT        NOT NULL CHECK (jenis IN ('INCOME','OUTGOING')),
@@ -81,47 +92,91 @@ CREATE TABLE pos_transactions (
 CREATE INDEX idx_transactions_tanggal ON pos_transactions(tanggal_waktu DESC);
 CREATE INDEX idx_transactions_jenis   ON pos_transactions(jenis);
 
--- ── Closed shift history (replaces localStorage pos_shift_history) ──
+-- ── Closed-shift history ──
+-- summary JSONB shape (v1.1):
+--   {
+--     cash, card, transfer, qris,                                -- expected totals per payment method
+--     total, totalIncome, totalOutgoing, jumlahTransaksi,
+--     actualCash, actualCard, actualTransfer, actualQris,        -- counted by cashier at close (each method)
+--     selisihCash, selisihCard, selisihTransfer, selisihQris,    -- actual - expected, per method
+--     closingNote                                                 -- cashier note; required by UI when any selisih != 0
+--   }
 CREATE TABLE pos_shifts (
-  id              TEXT        PRIMARY KEY,                   -- 'shift_<timestamp>'
+  id              TEXT        PRIMARY KEY,                   -- 'shift_<timestamp_ms>'
+  started_at      TIMESTAMPTZ,                                -- nullable; legacy shifts pre-dating this column may be NULL
   closed_at       TIMESTAMPTZ NOT NULL,
-  staff           JSONB       NOT NULL,                       -- array of unique staff names
-  summary         JSONB       NOT NULL,                       -- {cash, card, other, total, totalIncome, totalOutgoing, ...}
-  transactions    JSONB       NOT NULL                        -- deep copy of all txs in this shift
+  staff           JSONB       NOT NULL,                       -- array of unique staff usernames active during the shift
+  summary         JSONB       NOT NULL,
+  transactions    JSONB       NOT NULL                        -- deep copy of all txs that belonged to this shift
 );
 
 CREATE INDEX idx_shifts_closed_at ON pos_shifts(closed_at DESC);
 
--- ── Settings — single-row key/value (replaces pos_brand, pos_lang, etc.) ──
+-- ── Key/value settings ──
 CREATE TABLE pos_settings (
   key     TEXT  PRIMARY KEY,
   value   JSONB
 );
 
--- Seed default settings (owner updates these via first-run wizard)
+-- ── Session — single-row, tracks current logged-in user ──
+CREATE TABLE pos_session (
+  id           INT         PRIMARY KEY DEFAULT 1 CHECK (id = 1),  -- enforce single-row by constraining id
+  user_id      UUID        REFERENCES pos_users(id) ON DELETE SET NULL,
+  login_at     TIMESTAMPTZ
+);
+```
+
+---
+
+### 2.2 — Seed Default Data
+
+**What this does (English):**
+Inserts the initial rows the app expects on a fresh install:
+- The protected `START BALANCE` category (required by shift-start logic), plus four placeholder categories the owner can rename or delete from the first-run wizard.
+- Default `pos_settings` rows for brand name, language, and the shift-active flag.
+- The single locked-id row in `pos_session` (the app updates `user_id` and `login_at` on login, never inserts new rows).
+
+The owner overrides brand/categories/staff during the first-run wizard after first login.
+
+**SQL to paste:**
+
+```sql
+-- Default categories (owner can rename/reorder/delete the non-system ones)
+INSERT INTO pos_categories (name, sort_order, is_system) VALUES
+  ('START BALANCE', 0, TRUE),
+  ('Sales',         1, FALSE),
+  ('Refund',        2, FALSE),
+  ('Expense',       3, FALSE),
+  ('Other',         4, FALSE);
+
+-- Default settings (owner overrides via first-run wizard)
 INSERT INTO pos_settings (key, value) VALUES
   ('brand',         '"My Business"'::jsonb),
   ('lang',          '"en"'::jsonb),
   ('shift_active',  'false'::jsonb);
 
--- ── Session (single-row, tracks current logged-in user) ──
-CREATE TABLE pos_session (
-  id           INT         PRIMARY KEY DEFAULT 1 CHECK (id = 1),  -- enforce single row
-  user_id      UUID        REFERENCES pos_users(id) ON DELETE SET NULL,
-  login_at     TIMESTAMPTZ
-);
-
+-- Singleton session row (id is locked to 1; never insert a second row)
 INSERT INTO pos_session (id) VALUES (1);
+```
 
--- ============================================================
--- ROW LEVEL SECURITY (RLS)
--- Since each business = own Supabase project, data isolation is
--- already physical. Anon role gets full access. The anon key
--- itself is the secret — anyone with URL+key can access this
--- business's data.
--- ============================================================
+---
 
--- Enable RLS on all tables (best practice even with permissive policies)
+### 2.3 — Enable Row Level Security (RLS)
+
+**What this does (English):**
+Since each business gets its own dedicated Supabase project, physical isolation between tenants is already enforced at the project level. RLS is still enabled on every table (Supabase best practice — even with permissive policies, RLS-disabled tables generate console warnings and are flagged in Supabase's security advisor).
+
+A single permissive policy is granted to the `anon` role — the role the browser app uses with the public anon key. The anon key itself is the access secret: whoever has the URL + key has full access to that single business's data, which is acceptable for the per-business deployment model.
+
+**When migrating to a multi-tenant model later**, replace these permissive policies with tenant-scoped policies, for example:
+```sql
+USING (tenant_id = (auth.jwt() ->> 'tenant_id')::uuid)
+```
+
+**SQL to paste:**
+
+```sql
+-- Enable RLS on every table
 ALTER TABLE pos_users        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pos_categories   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pos_transactions ENABLE ROW LEVEL SECURITY;
@@ -129,7 +184,7 @@ ALTER TABLE pos_shifts       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pos_settings     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pos_session      ENABLE ROW LEVEL SECURITY;
 
--- Permissive policy: allow anon (the app) to do everything.
+-- Permissive policy: anon role (the browser app) has full CRUD access.
 -- Acceptable because each business has their own isolated project.
 CREATE POLICY "anon full access" ON pos_users        FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "anon full access" ON pos_categories   FOR ALL TO anon USING (true) WITH CHECK (true);
@@ -137,22 +192,136 @@ CREATE POLICY "anon full access" ON pos_transactions FOR ALL TO anon USING (true
 CREATE POLICY "anon full access" ON pos_shifts       FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "anon full access" ON pos_settings     FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "anon full access" ON pos_session      FOR ALL TO anon USING (true) WITH CHECK (true);
+```
 
--- ============================================================
--- REALTIME (untuk auto-sync antar device)
--- Enable broadcast on tables that change frequently
--- ============================================================
+---
 
+### 2.4 — Enable Realtime Publication
+
+**What this does (English):**
+Adds tables that the app subscribes to over Supabase Realtime (WebSocket). When any browser inserts, updates, or deletes a row in these tables, all other connected browsers receive a change event and re-render the relevant UI. This is what powers the live multi-device sync experience — e.g. cashier A inputs a transaction on the tablet, and the owner sees the new row appear on the laptop within ~1 second.
+
+`pos_shifts` is included so that a freshly-closed shift appears in the History view of other devices without a manual refresh. `pos_settings` is included so brand/language changes propagate instantly.
+
+**SQL to paste:**
+
+```sql
 ALTER PUBLICATION supabase_realtime ADD TABLE pos_transactions;
 ALTER PUBLICATION supabase_realtime ADD TABLE pos_session;
 ALTER PUBLICATION supabase_realtime ADD TABLE pos_categories;
 ALTER PUBLICATION supabase_realtime ADD TABLE pos_users;
 ALTER PUBLICATION supabase_realtime ADD TABLE pos_settings;
-
--- DONE!
+ALTER PUBLICATION supabase_realtime ADD TABLE pos_shifts;
 ```
 
-4. Pastikan output ada "Success. No rows returned" — schema selesai dibikin.
+---
+
+### 🔧 Combined SQL (Full Setup)
+
+Untuk setup sekali-jalan, paste blok di bawah ini ke SQL Editor (gabungan 2.1 → 2.4). Catatan: Supabase SQL Editor tidak auto-rollback kalau ada error di tengah — kalau ragu, jalankan blok terpisah di atas untuk lebih mudah debug.
+
+```sql
+-- ============================================================
+-- CHILL POS APP — Full schema setup (v1.1)
+-- Paste this entire block into Supabase SQL Editor and Run.
+-- ============================================================
+
+-- ─────── 2.1 Tables ───────
+CREATE TABLE pos_users (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  username    TEXT        UNIQUE NOT NULL,
+  pin_hash    TEXT,
+  role        TEXT        NOT NULL CHECK (role IN ('admin','cashier')),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE pos_categories (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT        UNIQUE NOT NULL,
+  sort_order  INT         NOT NULL DEFAULT 0,
+  is_system   BOOLEAN     NOT NULL DEFAULT FALSE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE pos_transactions (
+  id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  jenis           TEXT        NOT NULL CHECK (jenis IN ('INCOME','OUTGOING')),
+  kategori        TEXT        NOT NULL,
+  deskripsi       TEXT        NOT NULL,
+  jumlah          NUMERIC     NOT NULL,
+  metode          TEXT        NOT NULL CHECK (metode IN ('Cash','Card','Transfer','Qris')),
+  keterangan      TEXT,
+  staff           TEXT        NOT NULL,
+  tanggal_waktu   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_transactions_tanggal ON pos_transactions(tanggal_waktu DESC);
+CREATE INDEX idx_transactions_jenis   ON pos_transactions(jenis);
+
+CREATE TABLE pos_shifts (
+  id              TEXT        PRIMARY KEY,
+  started_at      TIMESTAMPTZ,
+  closed_at       TIMESTAMPTZ NOT NULL,
+  staff           JSONB       NOT NULL,
+  summary         JSONB       NOT NULL,
+  transactions    JSONB       NOT NULL
+);
+
+CREATE INDEX idx_shifts_closed_at ON pos_shifts(closed_at DESC);
+
+CREATE TABLE pos_settings (
+  key     TEXT  PRIMARY KEY,
+  value   JSONB
+);
+
+CREATE TABLE pos_session (
+  id           INT         PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  user_id      UUID        REFERENCES pos_users(id) ON DELETE SET NULL,
+  login_at     TIMESTAMPTZ
+);
+
+-- ─────── 2.2 Seed ───────
+INSERT INTO pos_categories (name, sort_order, is_system) VALUES
+  ('START BALANCE', 0, TRUE),
+  ('Sales',         1, FALSE),
+  ('Refund',        2, FALSE),
+  ('Expense',       3, FALSE),
+  ('Other',         4, FALSE);
+
+INSERT INTO pos_settings (key, value) VALUES
+  ('brand',         '"My Business"'::jsonb),
+  ('lang',          '"en"'::jsonb),
+  ('shift_active',  'false'::jsonb);
+
+INSERT INTO pos_session (id) VALUES (1);
+
+-- ─────── 2.3 RLS ───────
+ALTER TABLE pos_users        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pos_categories   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pos_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pos_shifts       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pos_settings     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pos_session      ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "anon full access" ON pos_users        FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon full access" ON pos_categories   FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon full access" ON pos_transactions FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon full access" ON pos_shifts       FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon full access" ON pos_settings     FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon full access" ON pos_session      FOR ALL TO anon USING (true) WITH CHECK (true);
+
+-- ─────── 2.4 Realtime ───────
+ALTER PUBLICATION supabase_realtime ADD TABLE pos_transactions;
+ALTER PUBLICATION supabase_realtime ADD TABLE pos_session;
+ALTER PUBLICATION supabase_realtime ADD TABLE pos_categories;
+ALTER PUBLICATION supabase_realtime ADD TABLE pos_users;
+ALTER PUBLICATION supabase_realtime ADD TABLE pos_settings;
+ALTER PUBLICATION supabase_realtime ADD TABLE pos_shifts;
+
+-- DONE.
+```
+
+Pastikan output ada "Success. No rows returned" — schema siap.
 
 ---
 
@@ -253,17 +422,24 @@ Sekarang tinggal buka app POS, isi first-run wizard, dan jalan! Semua device yan
 
 ## 🛠️ Roadmap (Untuk Developer)
 
-Untuk benar-benar bisa pakai Supabase, app POS perlu di-refactor:
+Untuk benar-benar bisa pakai Supabase, app POS perlu di-refactor. **Status saat ini:** beberapa adapter pattern sudah disiapkan di Fase 1 supaya migrate jadi lebih cepat.
 
-### Yang harus diubah
+### ✅ Sudah disiapkan di Fase 1 (architecture prep)
+- **`AuthStorage` adapter** — wraps localStorage user CRUD; body tinggal di-swap saat migrate
+- **`AccessGate` adapter** — wraps the `APP_ACCESS_CODE` constant; body tinggal di-swap ke RPC atau dihapus (lihat ROADMAP.md Batch 3.5)
+- **PIN reset flow** — pakai access code; flow akan di-replace dengan Supabase Auth email magic link saat migrate
+
+### 🔨 Yang harus diubah saat migrate
 1. **First-Run Wizard**: tambah field Supabase URL + anon key
 2. **`AuthStorage` adapter**: body diganti `await supabase.from('pos_users').select()` dll
 3. **`Storage` service**: dibuatkan `SupabaseStorage` versi yang sync ke tabel `pos_settings`, `pos_transactions`, dll
-4. **Realtime subscriptions**: listen ke perubahan `pos_transactions` & `pos_session`, auto-rerender saat data berubah dari device lain
+4. **Realtime subscriptions**: listen ke perubahan `pos_transactions`, `pos_session`, `pos_shifts`, `pos_settings`, auto-rerender saat data berubah dari device lain
 5. **Vendor Supabase SDK**: download `supabase.min.js` ke `vendor/`
 6. **Offline queue**: kalau internet drop, simpan ke localStorage, sync saat online lagi
+7. **PIN reset → email magic link**: replace AccessGate-based flow dengan Supabase Auth
+8. **Drop atau migrate AccessGate**: per Batch 3.5 di ROADMAP.md — Option A (hapus, pakai Supabase Auth) atau Option B (per-tenant code di `pos_settings`)
 
-Estimasi: **2-3 hari kerja**.
+Estimasi: **2-3 hari kerja** (lihat ROADMAP.md Fase 2 untuk breakdown per batch).
 
 ---
 
@@ -272,6 +448,7 @@ Estimasi: **2-3 hari kerja**.
 ### "ERROR: relation 'pos_users' already exists"
 Schema sudah pernah dijalankan. Drop dulu kalau mau fresh start:
 ```sql
+-- Reset: drop all CHILL POS tables. Data akan hilang permanen.
 DROP TABLE IF EXISTS pos_users, pos_categories, pos_transactions, pos_shifts, pos_settings, pos_session CASCADE;
 ```
 Kemudian jalankan schema lagi.
@@ -280,7 +457,14 @@ Kemudian jalankan schema lagi.
 Project auto-pause kalau 7 hari ga ada traffic. Klik tombol "Restore" di dashboard Supabase, tunggu ~1 menit.
 
 ### "Permission denied" saat query
-Cek RLS policies sudah dibuat. Re-run bagian "ROW LEVEL SECURITY" dari SQL di atas.
+Cek RLS policies sudah dibuat. Re-run blok **2.3** dari schema di atas.
+
+### Realtime ga jalan (perubahan ga muncul di device lain)
+Cek tabel sudah di-publish ke `supabase_realtime`:
+```sql
+SELECT tablename FROM pg_publication_tables WHERE pubname = 'supabase_realtime';
+```
+Output harus include `pos_transactions`, `pos_shifts`, dll. Kalau missing, re-run blok **2.4**.
 
 ### App ga konek ke Supabase
 - Cek URL & key di-paste lengkap (anon key panjang ~200 karakter)
@@ -288,10 +472,13 @@ Cek RLS policies sudah dibuat. Re-run bagian "ROW LEVEL SECURITY" dari SQL di at
 - Buka DevTools (F12) → tab Console, lihat error message
 - Cek project di dashboard belum di-pause
 
+### "summary doesn't have transfer/qris fields" — legacy shift records
+Shift yang dibuat sebelum v1.1 hanya punya field `cash`, `card`, `other` di summary. App sudah handle backward-compat (fallback ke `other` field saat render history detail). Tidak perlu migrate data lama — biarkan saja.
+
 ---
 
 ## 📞 Support
 
 Kalau ada pertanyaan setup, kontak [your contact info].
 
-**Versi guide:** 1.0 — disesuaikan dengan CHILL POS APP versi current.
+**Versi guide:** 1.1 — disesuaikan dengan CHILL POS APP terbaru (multi-method shifts, closing notes, shift duration tracking, AccessGate-based PIN reset).

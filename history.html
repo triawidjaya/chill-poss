@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
   <script src="vendor/xlsx.full.min.js"></script>
   <script src="vendor/papaparse.min.js"></script>
+  <script src="vendor/supabase.min.js"></script>
+  <script src="supabase.js"></script>
   <style>
     .history-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;padding-bottom:15px;border-bottom:1px solid var(--border-color)}
     .history-header h1{color:var(--primary);display:flex;align-items:center;gap:10px}
@@ -117,15 +119,7 @@
       <i class="fas fa-trash"></i> <span id="delete-selected-label">Delete Selected</span>
     </button>
   </div>
-  <script>
-    // Hide toolbar (delete actions) and per-card checkboxes for non-admins
-    if (!window._isAdmin) {
-      document.getElementById('history-toolbar').style.display = 'none';
-      const s = document.createElement('style');
-      s.textContent = '.shift-checkbox{display:none}';
-      document.head.appendChild(s);
-    }
-  </script>
+  <!-- Non-admin toolbar hiding is deferred to async init below (post-auth). -->
 
   <!-- Date range filter -->
   <div class="filter-container" id="hist-filter">
@@ -155,7 +149,8 @@
 <!-- lang.js must load before this script -->
 <script src="lang.js"></script>
 <script>
-// ── Storage (same as main app) ──
+// supabase.js loaded earlier provides Storage, AuthStorage, DataStore, SupabaseConfig.
+// HistStorage retained as thin localStorage wrapper for theme (UI-only state).
 const HistStorage = {
   get(key, fallback = null) {
     try { const r = localStorage.getItem(key); return r === null ? fallback : JSON.parse(r); }
@@ -166,26 +161,6 @@ const HistStorage = {
     catch { return false; }
   }
 };
-
-// ── Auth check — redirect to index.html if no session ──
-// History page reuses session set by index.html; if no users yet or no session, bounce home.
-(function authGuard() {
-  const users   = HistStorage.get('pos_users', []);
-  const session = HistStorage.get('pos_session', null);
-  if (users.length === 0 || !session) {
-    window.location.replace('index.html');
-    return;
-  }
-  const user = users.find(u => u.id === session.userId);
-  if (!user) {
-    HistStorage.set('pos_session', null);
-    window.location.replace('index.html');
-    return;
-  }
-  // Expose role check for guarding delete UI below
-  window._currentUser = user;
-  window._isAdmin     = user.role === 'admin';
-})();
 
 // ── Utilities ──
 const fmt = (n) => new Intl.NumberFormat('id-ID', { style:'currency', currency:'IDR', minimumFractionDigits:0 }).format(n);
@@ -256,7 +231,9 @@ function showAlert(message, type = 'info') {
 }
 
 // ── State ──
-let history  = HistStorage.get('pos_shift_history', []);
+// `history` is bound to DataStore.shifts (shared reference) inside init() once hydrated.
+// Empty array until init runs; renderList() handles empty state.
+let history  = [];
 let selectedIds = new Set();
 let dateFilter  = { preset: 'all', from: null, to: null };
 
@@ -401,16 +378,19 @@ function renderList() {
 
     card.querySelector('.btn-export-excel')?.addEventListener('click', () => exportShift(shift, 'excel'));
     card.querySelector('.btn-export-csv')?.addEventListener('click',   () => exportShift(shift, 'csv'));
-    card.querySelector('.btn-delete-shift')?.addEventListener('click', (e) => {
+    card.querySelector('.btn-delete-shift')?.addEventListener('click', async (e) => {
       e.stopPropagation();
       const dateStr = fmtDate(shift.closedAt);
       if (!confirm(t('confirmDeleteShiftSingle', dateStr))) return;
-      history = history.filter(s => s.id !== shift.id);
-      selectedIds.delete(shift.id);
-      HistStorage.set('pos_shift_history', history);
-      renderList();
-      renderChart();
-      showAlert(t('alertShiftsDeleted'), 'success');
+      try {
+        await DataStore.deleteShifts([shift.id]);
+        selectedIds.delete(shift.id);
+        renderList();
+        renderChart();
+        showAlert(t('alertShiftsDeleted'), 'success');
+      } catch (err) {
+        showAlert(`${t('alertShiftsDeleted')} (${err?.message || err})`, 'error');
+      }
     });
 
     list.appendChild(card);
@@ -590,15 +570,19 @@ document.getElementById('select-all').addEventListener('change', (e) => {
   renderList();
 });
 
-document.getElementById('btn-hapus-selected').addEventListener('click', () => {
+document.getElementById('btn-hapus-selected').addEventListener('click', async () => {
   if (selectedIds.size === 0) return;
   if (!confirm(t('alertDeleteShift', selectedIds.size))) return;
-  history = history.filter(s => !selectedIds.has(s.id));
-  selectedIds.clear();
-  HistStorage.set('pos_shift_history', history);
-  renderList();
-  renderChart();
-  showAlert(t('alertShiftsDeleted'), 'success');
+  const ids = [...selectedIds];
+  try {
+    await DataStore.deleteShifts(ids);
+    selectedIds.clear();
+    renderList();
+    renderChart();
+    showAlert(t('alertShiftsDeleted'), 'success');
+  } catch (err) {
+    showAlert(`${t('alertShiftsDeleted')} (${err?.message || err})`, 'error');
+  }
 });
 
 // ── Export ──
@@ -667,9 +651,53 @@ document.getElementById('date-to').addEventListener('change', (e) => {
 });
 
 // ── Init ──
-initTheme();
-applyLang();
-renderChart();
+initTheme();          // sync — theme persisted in localStorage, doesn't need Supabase
+
+// Async bootstrap: check config → hydrate → auth → bind data → realtime → render.
+(async function init() {
+  if (!SupabaseConfig.load()) {
+    window.location.replace('index.html');
+    return;
+  }
+  try {
+    await DataStore.hydrate();
+  } catch (e) {
+    alert(`Cloud connection failed: ${e?.message || e}\nRedirecting back to setup.`);
+    window.location.replace('index.html');
+    return;
+  }
+  // Auth check — needs users + session loaded from Supabase
+  if (DataStore.users.length === 0 || !DataStore.session) {
+    window.location.replace('index.html');
+    return;
+  }
+  const user = DataStore.users.find(u => u.id === DataStore.session.userId);
+  if (!user) {
+    window.location.replace('index.html');
+    return;
+  }
+  window._currentUser = user;
+  window._isAdmin     = user.role === 'admin';
+
+  // Hide delete UI for non-admins (deferred from inline script — needed _isAdmin first)
+  if (!window._isAdmin) {
+    document.getElementById('history-toolbar').style.display = 'none';
+    const s = document.createElement('style');
+    s.textContent = '.shift-checkbox{display:none}';
+    document.head.appendChild(s);
+  }
+
+  // Bind history to live cache. Mutations from realtime echo here automatically.
+  history = DataStore.shifts;
+
+  // Realtime: re-render when shifts table changes from another device.
+  DataStore.subscribeRealtime();
+  DataStore.on('shifts', () => { renderList(); renderChart(); });
+
+  applyLang();
+  renderChart();
+  renderList();
+})();
 </script>
 </body>
 </html>

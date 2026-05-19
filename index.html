@@ -91,6 +91,26 @@
 
 </div>
 
+<!-- Supabase Config Error Modal — hydrate failure / wrong config -->
+<div class="modal" id="sb-error-modal">
+  <div class="modal-content small">
+    <h2><i class="fas fa-cloud-bolt" style="color:var(--danger)"></i>
+        <span data-i18n="sbErrorTitle">Cloud Connection Error</span></h2>
+    <p class="wizard-hint" data-i18n="sbErrorHint">
+      Could not connect to Supabase. Check your internet, or reconfigure with a new URL + key.
+    </p>
+    <div id="sb-error-detail" style="font-size:0.78rem;color:var(--danger);background:rgba(247,37,133,0.08);padding:8px 10px;border-radius:4px;margin-bottom:12px;font-family:monospace;word-break:break-all"></div>
+    <div class="form-actions" style="grid-column:span 1;display:flex;gap:8px">
+      <button type="button" class="btn danger" id="sb-error-reset" style="flex:1;justify-content:center">
+        <i class="fas fa-redo"></i> <span data-i18n="sbErrorReset">Reset & Reconfigure</span>
+      </button>
+      <button type="button" class="btn primary" id="sb-error-retry" style="flex:1;justify-content:center">
+        <i class="fas fa-sync"></i> <span data-i18n="sbErrorRetry">Retry</span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- Access Gate Modal — shown first, no close button -->
 <div class="modal" id="access-gate-modal">
   <div class="modal-content small">
@@ -125,6 +145,22 @@
       <i class="fas fa-question-circle"></i> <span data-i18n="helpReadFirst">Read Quick Start Guide first</span>
     </button>
     <form id="first-run-form">
+      <div id="fr-supabase-section" class="fr-section" style="background:rgba(67,97,238,0.06);border:1px solid rgba(67,97,238,0.2);border-radius:8px;padding:12px;margin-bottom:14px">
+        <div style="font-weight:600;color:var(--primary);margin-bottom:8px;font-size:0.9rem">
+          <i class="fas fa-cloud"></i> <span data-i18n="supabaseSection">Cloud Backend (Supabase)</span>
+        </div>
+        <p class="wizard-hint" style="font-size:0.78rem;margin-bottom:10px" data-i18n="supabaseHint">
+          Get these from your Supabase project: Settings → Data API (URL) and API Keys (Publishable key).
+        </p>
+        <div class="form-group" style="margin-bottom:8px">
+          <label for="fr-sb-url" data-i18n="supabaseUrl">Supabase Project URL</label>
+          <input type="url" id="fr-sb-url" placeholder="https://xxxx.supabase.co" autocomplete="off" required>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label for="fr-sb-key" data-i18n="supabaseKey">Publishable Key</label>
+          <input type="text" id="fr-sb-key" placeholder="sb_publishable_..." autocomplete="off" required>
+        </div>
+      </div>
       <div class="form-group">
         <label for="fr-brand" data-i18n="brandName">Brand Name</label>
         <input type="text" id="fr-brand" maxlength="50" required placeholder="e.g. Warung Pak Budi">
@@ -505,6 +541,8 @@
 
 <script src="vendor/papaparse.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
+<script src="vendor/supabase.min.js"></script>
+<script src="supabase.js"></script>
 <script src="lang.js"></script>
 <script src="script.js"></script>
 </body>

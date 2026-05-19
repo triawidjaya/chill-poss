@@ -1,39 +1,17 @@
 // ============================================================
-// STORAGE SERVICE — centralized localStorage access
-// Prevents crashes from corrupted data or full storage
+// STORAGE & AUTH STORAGE — provided globally by supabase.js
+// (Storage, AuthStorage, DataStore, SupabaseConfig, getSupabase)
+//
+// Reads are synchronous from DataStore's in-memory cache.
+// Writes route to Supabase via DataStore CRUD methods.
+// UI-only keys (theme, header, access gate, lang, sb config)
+// still hit localStorage directly.
 // ============================================================
-const Storage = {
-  get(key, fallback = null) {
-    try {
-      const raw = localStorage.getItem(key);
-      if (raw === null) return fallback;
-      return JSON.parse(raw);
-    } catch {
-      console.warn(`[Storage] Failed to read key "${key}", using fallback.`);
-      return fallback;
-    }
-  },
-  set(key, value) {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-      return true;
-    } catch (e) {
-      if (e.name === 'QuotaExceededError' || e.code === 22) {
-        console.error('[Storage] localStorage is full!');
-        return 'quota';
-      }
-      console.error('[Storage] Failed to save:', e);
-      return false;
-    }
-  },
-  remove(key) {
-    try { localStorage.removeItem(key); } catch { /* ignore */ }
-  }
-};
 
 // ============================================================
-// VALIDATOR — ensures localStorage data structure is valid
-// Prevents crashes if data is corrupted or manipulated
+// VALIDATOR — defensive checks on cached data structure.
+// Supabase CHECK constraints already enforce most invariants;
+// kept for any client-only data path.
 // ============================================================
 const Validator = {
   VALID_JENIS:  ['INCOME', 'OUTGOING'],
@@ -121,14 +99,8 @@ const ROLE_PERMISSIONS = {
   ],
 };
 
-// Storage adapter — swap body to fetch() in Opsi 2; Auth never changes.
-const AuthStorage = {
-  async getUsers()       { return Storage.get('pos_users', []); },
-  async saveUsers(users) { return Storage.set('pos_users', users); },
-  async getSession()     { return Storage.get('pos_session', null); },
-  async saveSession(s)   { return Storage.set('pos_session', s); },
-  async clearSession()   { Storage.remove('pos_session'); },
-};
+// AuthStorage is provided globally by supabase.js (Supabase-backed adapter).
+// API surface: getUsers(), saveUsers(users), getSession(), saveSession(s), clearSession().
 
 const Auth = {
   _currentUser: null,
@@ -157,8 +129,9 @@ const Auth = {
     if (users.some(u => u.username === username)) {
       throw new Error('userExists');
     }
+    // Raw UUID — must match pos_users.id UUID column on Supabase.
     const user = {
-      id:        `usr_${crypto.randomUUID()}`,
+      id:        crypto.randomUUID(),
       username,
       pinHash:   await this._buildPinHash(pin),
       role,
@@ -265,34 +238,137 @@ const Auth = {
 
 class ChillPOS {
   constructor() {
-    // Load all data through Storage + Validator to prevent crashes
-    const rawTransactions = Storage.get('pos_transactions', []);
-    this.transactions = Validator.sanitizeTransactions(rawTransactions);
+    // Defaults — real values bind to DataStore after hydrate() in bootstrap().
+    this.transactions = [];
+    this.categories   = [...DEFAULT_CATEGORIES];
+    this.staffList    = Validator.sanitizeStringList(
+      Storage.get('pos_staff', null), DEFAULT_STAFF
+    );
+    this.brandName    = DEFAULT_BRAND;
+    this.shiftActive  = false;
 
-    const rawCategories = Storage.get('pos_categories', null);
-    this.categories = Validator.sanitizeStringList(rawCategories, DEFAULT_CATEGORIES);
-
-    const rawStaff = Storage.get('pos_staff', null);
-    this.staffList = Validator.sanitizeStringList(rawStaff, DEFAULT_STAFF);
-
-    this.brandName   = Storage.get('pos_brand', DEFAULT_BRAND);
     this.currentEditId = null;
     this.confirmAction = null;
-    this.shiftActive   = Storage.get('pos_shift_active', false);
-
-    this.sortState   = { kolom: 'tanggalWaktu', arah: 'desc' };
+    this.sortState     = { kolom: 'tanggalWaktu', arah: 'desc' };
 
     this.initElements();
     this.initEventListeners();
     this.initTheme();
     this.initLang();
     this.renderAll();
-    // Auth bootstrap (async) — picks the right startup flow:
-    //   first-run (no brand)  → wizard (creates admin + auto-login)
-    //   existing data, no users → setup-admin modal (one-time)
-    //   has session           → restore + proceed
-    //   else                  → login modal
-    this.bootstrapAuth();
+
+    // Async bootstrap: access gate → Supabase config → hydrate → realtime → auth.
+    this.bootstrap();
+  }
+
+  // ============================================================
+  // BOOTSTRAP — orchestrates the cold-start sequence.
+  // 1. Access gate (local secret)
+  // 2. Supabase config check (first-run wizard if missing)
+  // 3. Hydrate cache from Supabase (error modal on failure)
+  // 4. Subscribe realtime + register UI listeners
+  // 5. Hand off to bootstrapAuth (existing wizard / login flow)
+  // ============================================================
+
+  async bootstrap() {
+    if (!Storage.get(STORAGE_KEY_ACCESS, false)) {
+      this.showAccessGate();
+      return;
+    }
+    if (!SupabaseConfig.load()) {
+      // No cloud config yet — wizard will collect URL + key.
+      this.showFirstRunWizard();
+      return;
+    }
+    try {
+      await DataStore.hydrate();
+    } catch (e) {
+      this._showSupabaseError(e);
+      return;
+    }
+    this._bindDataStore();
+    DataStore.subscribeRealtime();
+    this._registerRealtimeListeners();
+    this.renderAll();
+    await this.bootstrapAuth();
+  }
+
+  // Bind in-memory references to DataStore arrays so they stay in sync
+  // with realtime updates. Caller MUST NOT reassign these arrays — use
+  // splice/push/length=0 or DataStore CRUD methods instead.
+  _bindDataStore() {
+    this.transactions = DataStore.transactions;
+    this.categories   = DataStore.categories;
+    this.brandName    = DataStore.settings.brand;
+    this.shiftActive  = DataStore.settings.shiftActive;
+  }
+
+  // Wire DataStore realtime events to UI re-render hooks.
+  _registerRealtimeListeners() {
+    DataStore.on('transactions', () => this.renderAll());
+
+    DataStore.on('categories', () => {
+      // Refresh open Settings categories list (if open)
+      if (this.elements.settingsModal?.style.display === 'flex') {
+        this.renderCategoriesList();
+      }
+    });
+
+    DataStore.on('users', () => {
+      this._syncStaffFromUsers().then(() => {
+        if (document.getElementById('users-modal')?.style.display === 'flex') {
+          this.renderUsersList();
+        }
+      });
+    });
+
+    DataStore.on('session', () => {
+      const cur = Auth.currentUser();
+      if (!cur) return;
+      // If remote session no longer matches us, force this device to login.
+      if (!DataStore.session || DataStore.session.userId !== cur.id) {
+        Auth._currentUser = null;
+        ['form-modal', 'settings-modal', 'users-modal',
+         'mulai-shift-modal', 'tutup-shift-modal'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.style.display = 'none';
+        });
+        this.applyAuthUI();
+        this.showLoginModal();
+        this.showAlert(t('remoteLogout'), 'info');
+      }
+    });
+
+    DataStore.on('settings', () => {
+      this.brandName   = DataStore.settings.brand;
+      this.shiftActive = DataStore.settings.shiftActive;
+      this.renderBrandName();
+      this.updateShiftUI();
+    });
+
+    DataStore.on('shifts', () => {
+      // Main page only needs this for the "use last shift cash" prefill.
+      if (this.elements.mulaiShiftModal?.style.display === 'flex') {
+        this._renderLastShiftButton();
+      }
+    });
+  }
+
+  // Show the cloud-connection error modal with retry / reset actions.
+  _showSupabaseError(err) {
+    const modal  = document.getElementById('sb-error-modal');
+    const detail = document.getElementById('sb-error-detail');
+    detail.textContent = err?.message || String(err);
+    modal.style.display = 'flex';
+    document.getElementById('sb-error-retry').onclick = () => {
+      modal.style.display = 'none';
+      this.bootstrap();
+    };
+    document.getElementById('sb-error-reset').onclick = () => {
+      if (!confirm(t('confirmResetSupabase'))) return;
+      SupabaseConfig.clear();
+      window.location.reload();
+    };
   }
 
   // ============================================================
@@ -334,7 +410,7 @@ class ChillPOS {
       if (await AccessGate.verify(input)) {
         Storage.set(STORAGE_KEY_ACCESS, true);
         modal.style.display = 'none';
-        this.bootstrapAuth();
+        this.bootstrap();
       } else {
         err.style.display = 'block';
         document.getElementById('access-code-input').value = '';
@@ -732,6 +808,23 @@ class ChillPOS {
     document.getElementById('fr-admin-pin').value  = '';
     document.getElementById('fr-admin-pin2').value = '';
     this._refreshAdminNameDropdown();
+
+    // Show Supabase fields only if config not yet saved (first deployment).
+    const sbSection = document.getElementById('fr-supabase-section');
+    const sbUrl     = document.getElementById('fr-sb-url');
+    const sbKey     = document.getElementById('fr-sb-key');
+    if (SupabaseConfig.load()) {
+      sbSection.style.display = 'none';
+      sbUrl.required = false;
+      sbKey.required = false;
+    } else {
+      sbSection.style.display = '';
+      sbUrl.value = '';
+      sbKey.value = '';
+      sbUrl.required = true;
+      sbKey.required = true;
+    }
+
     document.getElementById('first-run-modal').style.display = 'flex';
   }
 
@@ -771,12 +864,37 @@ class ChillPOS {
 
     if (!cats.includes('START BALANCE')) cats.unshift('START BALANCE');
 
-    this.brandName  = brand;
-    this.categories = cats;
-    this.staffList  = staff;
-    Storage.set('pos_brand',      brand);
-    Storage.set('pos_categories', cats);
-    Storage.set('pos_staff',      staff);
+    // If Supabase not yet configured, save config + hydrate before continuing.
+    if (!SupabaseConfig.load()) {
+      const sbUrl = document.getElementById('fr-sb-url').value.trim();
+      const sbKey = document.getElementById('fr-sb-key').value.trim();
+      if (!SupabaseConfig.isValidUrl(sbUrl)) { this.showAlert(t('invalidSupabaseUrl'), 'error'); return; }
+      if (!SupabaseConfig.isValidKey(sbKey)) { this.showAlert(t('invalidSupabaseKey'), 'error'); return; }
+      try {
+        SupabaseConfig.save(sbUrl, sbKey);
+        await DataStore.hydrate();
+        this._bindDataStore();
+        DataStore.subscribeRealtime();
+        this._registerRealtimeListeners();
+      } catch (e) {
+        SupabaseConfig.clear();
+        this.showAlert(`${t('sbErrorHint')} (${e?.message || e})`, 'error');
+        return;
+      }
+    }
+
+    // Persist business setup. Brand + categories awaited so we know they're
+    // durable before creating users (which is the point of no return).
+    try {
+      await DataStore.saveSetting('brand', brand);
+      await DataStore.saveCategories(cats);
+    } catch (e) {
+      this.showAlert(`${t('sbErrorHint')} (${e?.message || e})`, 'error');
+      return;
+    }
+    this.brandName = brand;
+    this.staffList = staff;
+    Storage.set('pos_staff', staff);   // local cache for offline UI fallback
 
     // Create users: chosen admin gets PIN, others are cashier with no PIN
     try {
@@ -901,7 +1019,7 @@ class ChillPOS {
     document.getElementById('confirm-ok').addEventListener('click',     () => this.executeConfirm());
 
     // Transaction form submit + type toggle + cancel
-    this.elements.transaksiForm.addEventListener('submit', (e) => { e.preventDefault(); this.simpanTransaksi(); });
+    this.elements.transaksiForm.addEventListener('submit', async (e) => { e.preventDefault(); await this.simpanTransaksi(); });
     this.elements.transaksiForm.querySelectorAll('.type-btn').forEach(btn => {
       btn.addEventListener('click', () => this.setActiveType(btn.dataset.type));
     });
@@ -974,7 +1092,7 @@ class ChillPOS {
     document.getElementById('ts-batal-input').addEventListener('click',  () => {
       this.elements.tutupShiftModal.style.display = 'none';
     });
-    document.getElementById('ts-confirm-close').addEventListener('click', () => this.eksekusiTutupShift());
+    document.getElementById('ts-confirm-close').addEventListener('click', async () => { await this.eksekusiTutupShift(); });
 
     // Sort — click table header
     document.getElementById('transaksi-table').querySelector('thead')
@@ -1275,10 +1393,14 @@ class ChillPOS {
       tanggalWaktu: new Date().toISOString()
     };
 
-    this.transactions.push(startTx);
-    this._saveTransactions();
-    this.shiftActive = true;
-    Storage.set('pos_shift_active', true);
+    try {
+      await DataStore.insertTransaction(startTx);
+      this.shiftActive = true;
+      await DataStore.saveSetting('shift_active', true);
+    } catch (e) {
+      this.showAlert(`${t('alertShiftPinWrong')} (${e?.message || e})`, 'error');
+      return;
+    }
     this.elements.mulaiShiftModal.style.display = 'none';
     this.renderAll();
     this.updateShiftUI();
@@ -1548,11 +1670,6 @@ class ChillPOS {
     }).format(amount);
   }
 
-  // Single point for saving transactions to storage
-  _saveTransactions() {
-    return Storage.set('pos_transactions', this.transactions);
-  }
-
   calculateSaldo(metode) {
     return this.transactions
       .filter(tx => tx.metode === metode)
@@ -1626,8 +1743,10 @@ class ChillPOS {
   // Reset only resets brand & categories. Staff/users are NEVER touched here
   // — that would orphan all auth + lose all logins. Use Manage Users for users.
   resetSettings() {
-    this.brandName  = DEFAULT_BRAND;
-    this.categories = [...DEFAULT_CATEGORIES];
+    this.brandName = DEFAULT_BRAND;
+    // Mutate categories in place to preserve shared reference with DataStore.categories.
+    this.categories.length = 0;
+    DEFAULT_CATEGORIES.forEach(c => this.categories.push(c));
     Storage.set('pos_brand',      this.brandName);
     Storage.set('pos_categories', this.categories);
     this.renderBrandName();
@@ -1661,7 +1780,7 @@ class ChillPOS {
   // TRANSACTION CRUD
   // ============================================================
 
-  simpanTransaksi() {
+  async simpanTransaksi() {
     const jenis = document.querySelector('.type-btn.income.active')   ? 'INCOME'
                 : document.querySelector('.type-btn.outgoing.active') ? 'OUTGOING' : null;
 
@@ -1684,52 +1803,46 @@ class ChillPOS {
     submitBtn.disabled  = true;
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
-    setTimeout(() => {
-      try {
-        if (jenis === 'OUTGOING') jumlah = -jumlah;
+    try {
+      if (jenis === 'OUTGOING') jumlah = -jumlah;
 
-        const originalDate = this.currentEditId
-          ? this.transactions.find(tx => tx.id === this.currentEditId)?.tanggalWaktu
-          : null;
+      const isEdit       = !!this.currentEditId;
+      const originalDate = isEdit
+        ? this.transactions.find(tx => tx.id === this.currentEditId)?.tanggalWaktu
+        : null;
 
-        const txData = {
-          id:           this.currentEditId || crypto.randomUUID(),
-          jenis, kategori, deskripsi, jumlah, metode, keterangan, staff,
-          tanggalWaktu: originalDate || new Date().toISOString()
-        };
+      const txData = {
+        id:           this.currentEditId || crypto.randomUUID(),
+        jenis, kategori, deskripsi, jumlah, metode, keterangan, staff,
+        tanggalWaktu: originalDate || new Date().toISOString()
+      };
 
-        if (this.currentEditId) {
-          const idx = this.transactions.findIndex(tx => tx.id === this.currentEditId);
-          if (idx !== -1) this.transactions[idx] = txData;
-        } else {
-          this.transactions.push(txData);
-        }
+      if (isEdit) await DataStore.updateTransaction(txData);
+      else        await DataStore.insertTransaction(txData);
 
-        const saved = this._saveTransactions();
-        if (saved === 'quota') {
-          this.showAlert(t('alertStorageFull'), 'error');
-          this.currentEditId ? null : this.transactions.pop();
-          return;
-        }
-        this.renderAll();
-        this.hideForm();
-        this.showAlert(t(this.currentEditId ? 'alertUpdated' : 'alertSaved'), 'success');
-      } finally {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = originalHTML;
-      }
-    }, 150);
+      this.renderAll();
+      this.hideForm();
+      this.showAlert(t(isEdit ? 'alertUpdated' : 'alertSaved'), 'success');
+    } catch (e) {
+      this.showAlert(`${t('alertFillForm')} (${e?.message || e})`, 'error');
+    } finally {
+      submitBtn.disabled  = false;
+      submitBtn.innerHTML = originalHTML;
+    }
   }
 
   hapusTransaksi(id) {
     if (!Auth.can(PERMISSIONS.DELETE_TRANSACTION)) {
       this.showAlert(t('noPermission'), 'error'); return;
     }
-    this.showConfirm(t('confirmDefault'), () => {
-      this.transactions = this.transactions.filter(tx => tx.id !== id);
-      this._saveTransactions();
-      this.renderAll();
-      this.showAlert(t('alertDeleted'), 'success');
+    this.showConfirm(t('confirmDefault'), async () => {
+      try {
+        await DataStore.deleteTransaction(id);
+        this.renderAll();
+        this.showAlert(t('alertDeleted'), 'success');
+      } catch (e) {
+        this.showAlert(`${t('alertDeleted')} ${e?.message || e}`, 'error');
+      }
     });
   }
 
@@ -1869,7 +1982,7 @@ class ChillPOS {
     this.elements.tsStepSummary.style.display = '';
   }
 
-  eksekusiTutupShift() {
+  async eksekusiTutupShift() {
     const { actualCash, actualCard, actualTransfer, actualQris, hasSelisih } =
       this._pendingActual || { actualCash: 0, actualCard: 0, actualTransfer: 0, actualQris: 0, hasSelisih: false };
 
@@ -1896,14 +2009,18 @@ class ChillPOS {
       closingNote:     note,
     };
 
-    this.saveShiftHistory();
-    this.saveToCSV();
-    this.transactions      = [];
-    this.shiftActive       = false;
+    try {
+      await this.saveShiftHistory();
+      this.saveToCSV();
+      await DataStore.clearTransactions();
+      this.shiftActive = false;
+      await DataStore.saveSetting('shift_active', false);
+    } catch (e) {
+      this.showAlert(`${t('alertShiftClosed')} (${e?.message || e})`, 'error');
+      return;
+    }
     this._pendingActual    = null;
     this._actualForHistory = null;
-    Storage.remove('pos_transactions');
-    Storage.remove('pos_shift_active');
     this.elements.tutupShiftModal.style.display = 'none';
     this.renderAll();
     this.updateShiftUI();
@@ -1916,8 +2033,7 @@ class ChillPOS {
   // Max 50 shifts — oldest is auto-removed
   // ============================================================
 
-  saveShiftHistory() {
-    const MAX_HISTORY = 50;
+  async saveShiftHistory() {
     const staff    = [...new Set(this.transactions.map(tx => tx.staff))];
     const cash     = this.calculateSaldo('Cash');
     const card     = this.calculateSaldo('Card');
@@ -1925,7 +2041,6 @@ class ChillPOS {
     const qris     = this.calculateSaldo('Qris');
 
     // startedAt sourced from the START BALANCE tx — it's always inserted at shift start.
-    // Legacy shifts without this field will render as "—" in history.
     const startedAt = this.transactions.find(tx => tx.kategori === 'START BALANCE')?.tanggalWaktu ?? null;
 
     const shiftRecord = {
@@ -1952,9 +2067,7 @@ class ChillPOS {
       transactions: this.transactions.map(tx => ({ ...tx }))
     };
 
-    const existing = Storage.get('pos_shift_history', []);
-    const updated  = [shiftRecord, ...existing].slice(0, MAX_HISTORY);
-    Storage.set('pos_shift_history', updated);
+    await DataStore.insertShift(shiftRecord);
     return shiftRecord;
   }
 

@@ -197,6 +197,19 @@ const STRINGS = {
     categoryExists:'Category already exists',
     systemBadge:'system',
     renameUserPrompt:'New username:',
+    // ── Supabase / cloud sync ──
+    supabaseSection:'Cloud Backend (Supabase)',
+    supabaseHint:'Get these from your Supabase project: Settings → Data API (URL) and API Keys (Publishable key).',
+    supabaseUrl:'Supabase Project URL',
+    supabaseKey:'Publishable Key',
+    invalidSupabaseUrl:'Invalid Supabase URL. Expected format: https://xxxx.supabase.co',
+    invalidSupabaseKey:'Invalid publishable key. Expected to start with "sb_publishable_" or "eyJ".',
+    sbErrorTitle:'Cloud Connection Error',
+    sbErrorHint:'Could not connect to Supabase. Check your internet, or reconfigure with a new URL + key.',
+    sbErrorRetry:'Retry',
+    sbErrorReset:'Reset & Reconfigure',
+    confirmResetSupabase:'Reset Supabase config and reload? You will be asked to enter the URL + key again.',
+    remoteLogout:'Signed out from another device.',
   },
   id: {
     historyShift:'Histori Shift',appTitle:'CHILL POS APP',
@@ -357,6 +370,19 @@ const STRINGS = {
     categoryExists:'Kategori sudah ada',
     systemBadge:'sistem',
     renameUserPrompt:'Nama pengguna baru:',
+    // ── Supabase / cloud sync ──
+    supabaseSection:'Backend Cloud (Supabase)',
+    supabaseHint:'Ambil dari project Supabase: Settings → Data API (URL) dan API Keys (Publishable key).',
+    supabaseUrl:'URL Project Supabase',
+    supabaseKey:'Publishable Key',
+    invalidSupabaseUrl:'URL Supabase tidak valid. Format yang benar: https://xxxx.supabase.co',
+    invalidSupabaseKey:'Publishable key tidak valid. Harus diawali "sb_publishable_" atau "eyJ".',
+    sbErrorTitle:'Gagal Konek ke Cloud',
+    sbErrorHint:'Tidak bisa terhubung ke Supabase. Cek koneksi internet, atau reconfigure dengan URL + key baru.',
+    sbErrorRetry:'Coba Lagi',
+    sbErrorReset:'Reset & Setup Ulang',
+    confirmResetSupabase:'Reset konfigurasi Supabase dan reload? Anda akan diminta memasukkan URL + key lagi.',
+    remoteLogout:'Logout dari device lain.',
   }
 };
 
