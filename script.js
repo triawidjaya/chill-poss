@@ -1190,6 +1190,19 @@ class ChillPOS {
     });
     document.getElementById('logout-btn').addEventListener('click', () => this.handleLogout());
 
+    // Upgrade to Cloud (Local mode only)
+    document.getElementById('open-upgrade-cloud').addEventListener('click', () => {
+      this.hideSettings();
+      this.showUpgradeCloudModal();
+    });
+    document.getElementById('close-upgrade-cloud').addEventListener('click', () => {
+      document.getElementById('upgrade-cloud-modal').style.display = 'none';
+    });
+    document.getElementById('upgrade-cloud-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await this.handleUpgradeCloud();
+    });
+
     // Users management modal
     document.getElementById('open-users').addEventListener('click', () => {
       this.hideSettings();
@@ -1756,10 +1769,58 @@ class ChillPOS {
       this.showAlert(t('noPermission'), 'error'); return;
     }
     document.getElementById('open-users').style.display = Auth.can(PERMISSIONS.MANAGE_USERS) ? '' : 'none';
+    // "Upgrade to Cloud" only shows for admin while running in Local mode.
+    document.getElementById('open-upgrade-cloud').style.display =
+      (DataStore.isLocal() && Auth.can(PERMISSIONS.MANAGE_SETTINGS)) ? '' : 'none';
     this.renderCategoriesList();
     this.elements.settingsBrand.value = this.brandName;
     this.elements.settingsStaff.value = this.staffList.join('\n');   // view-only mirror
     this.elements.settingsModal.style.display = 'flex';
+  }
+
+  // Open the Local→Cloud migration modal.
+  showUpgradeCloudModal() {
+    const modal = document.getElementById('upgrade-cloud-modal');
+    document.getElementById('uc-url').value = '';
+    document.getElementById('uc-key').value = '';
+    document.getElementById('uc-progress').style.display = 'none';
+    modal.style.display = 'flex';
+  }
+
+  async handleUpgradeCloud() {
+    const url    = document.getElementById('uc-url').value;
+    const key    = document.getElementById('uc-key').value;
+    const submit = document.getElementById('uc-submit');
+    const prog   = document.getElementById('uc-progress');
+    const progT  = document.getElementById('uc-progress-text');
+
+    if (!SupabaseConfig.isValidUrl(url)) { this.showAlert(t('invalidSupabaseUrl'), 'error'); return; }
+    if (!SupabaseConfig.isValidKey(key)) { this.showAlert(t('invalidSupabaseKey'), 'error'); return; }
+
+    submit.disabled = true;
+    prog.style.display = '';
+    progT.textContent = t('upgradeChecking');
+
+    try {
+      progT.textContent = t('upgradeMigrating');
+      const counts = await migrateLocalToCloud(url, key);
+      // Persist config + switch mode, then reload to bootstrap into Cloud.
+      SupabaseConfig.save(url, key);
+      DataStore.setMode('cloud');
+      this.showAlert(
+        `${t('upgradeDone')} (${counts.transactions} tx, ${counts.shifts} shifts, ${counts.users} users)`,
+        'success'
+      );
+      setTimeout(() => window.location.reload(), 1200);
+    } catch (e) {
+      submit.disabled = false;
+      prog.style.display = 'none';
+      const msgKey = e?.message === 'cloudNotEmpty'        ? 'upgradeCloudNotEmpty'
+                   : e?.message === 'invalidSupabaseUrl'   ? 'invalidSupabaseUrl'
+                   : e?.message === 'invalidSupabaseKey'   ? 'invalidSupabaseKey'
+                   : null;
+      this.showAlert(msgKey ? t(msgKey) : `${t('upgradeFailed')} (${e?.message || e})`, 'error');
+    }
   }
 
   hideSettings() { this.elements.settingsModal.style.display = 'none'; }

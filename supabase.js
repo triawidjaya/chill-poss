@@ -713,9 +713,99 @@ const AuthStorage = {
   },
 };
 
+// ============================================================
+// Migrate Local-mode data to a fresh Supabase project.
+// Returns counts on success; throws on validation / non-empty target /
+// network failure. Caller persists config + setMode('cloud') + reloads
+// only when this resolves.
+// ============================================================
+async function migrateLocalToCloud(url, key) {
+  if (!SupabaseConfig.isValidUrl(url)) throw new Error('invalidSupabaseUrl');
+  if (!SupabaseConfig.isValidKey(key)) throw new Error('invalidSupabaseKey');
+  if (typeof supabase === 'undefined' || !supabase.createClient) {
+    throw new Error('Supabase SDK not loaded');
+  }
+  const cleanUrl = SupabaseConfig._normalizeUrl(url);
+  const cleanKey = String(key).trim();
+  const client = supabase.createClient(cleanUrl, cleanKey, {
+    auth: { persistSession: false },
+  });
+
+  // 1. Verify target project is fresh — refuse to overwrite existing data.
+  const [brandRes, usersRes, txRes] = await Promise.all([
+    client.from('pos_settings').select('value').eq('key', 'brand').maybeSingle(),
+    client.from('pos_users').select('id', { count: 'exact', head: true }),
+    client.from('pos_transactions').select('id', { count: 'exact', head: true }),
+  ]);
+  if (brandRes.error) throw new Error(`Cloud check failed: ${brandRes.error.message}`);
+  if (usersRes.error) throw new Error(`Cloud check failed: ${usersRes.error.message}`);
+  if (txRes.error)    throw new Error(`Cloud check failed: ${txRes.error.message}`);
+
+  const targetBrand = brandRes.data?.value;
+  const targetUserCount = usersRes.count ?? 0;
+  const targetTxCount   = txRes.count ?? 0;
+  const isFresh = (!targetBrand || targetBrand === 'My Business')
+               && targetUserCount === 0
+               && targetTxCount   === 0;
+  if (!isFresh) throw new Error('cloudNotEmpty');
+
+  // 2. Snapshot local data (DataStore is still in local mode).
+  const localTxs    = DataStore.transactions.map(t => ({ ...t }));
+  const localShifts = DataStore.shifts.map(s => ({ ...s }));
+  const localCats   = [...DataStore.categories];
+  const localUsers  = DataStore.users.map(u => ({ ...u }));
+  const localBrand        = DataStore.settings.brand;
+  const localShiftActive  = DataStore.settings.shiftActive;
+  const localSession      = _lsGet('pos_session', null);
+
+  // 3. Write to cloud. Order matters only for FK / unique constraints.
+  await client.from('pos_settings').upsert({ key: 'brand',        value: localBrand });
+  await client.from('pos_settings').upsert({ key: 'shift_active', value: localShiftActive });
+
+  // Categories: replace seeded non-system rows with local list. START BALANCE
+  // is already seeded; upsert by name updates its sort_order.
+  {
+    const { error } = await client.from('pos_categories').delete().eq('is_system', false);
+    if (error) throw new Error(`Categories cleanup failed: ${error.message}`);
+    if (localCats.length > 0) {
+      const rows = localCats.map((name, idx) => ({
+        name, sort_order: idx, is_system: name === 'START BALANCE',
+      }));
+      const { error: e2 } = await client.from('pos_categories').upsert(rows, { onConflict: 'name' });
+      if (e2) throw new Error(`Categories migrate failed: ${e2.message}`);
+    }
+  }
+
+  if (localUsers.length > 0) {
+    const { error } = await client.from('pos_users').insert(localUsers.map(toDbUser));
+    if (error) throw new Error(`Users migrate failed: ${error.message}`);
+  }
+  if (localTxs.length > 0) {
+    const { error } = await client.from('pos_transactions').insert(localTxs.map(toDbTx));
+    if (error) throw new Error(`Transactions migrate failed: ${error.message}`);
+  }
+  if (localShifts.length > 0) {
+    const { error } = await client.from('pos_shifts').insert(localShifts.map(toDbShift));
+    if (error) throw new Error(`Shifts migrate failed: ${error.message}`);
+  }
+  if (localSession?.userId) {
+    const { error } = await client.from('pos_session')
+      .update({ user_id: localSession.userId, login_at: localSession.loginAt }).eq('id', 1);
+    if (error) throw new Error(`Session migrate failed: ${error.message}`);
+  }
+
+  return {
+    transactions: localTxs.length,
+    shifts:       localShifts.length,
+    users:        localUsers.length,
+    categories:   localCats.length,
+  };
+}
+
 // Expose DataStore + SupabaseConfig globally for script.js / history.html
-window.DataStore       = DataStore;
-window.SupabaseConfig  = SupabaseConfig;
-window.getSupabase     = getSupabase;
-window.Storage         = Storage;
-window.AuthStorage     = AuthStorage;
+window.DataStore           = DataStore;
+window.SupabaseConfig      = SupabaseConfig;
+window.getSupabase         = getSupabase;
+window.Storage             = Storage;
+window.AuthStorage         = AuthStorage;
+window.migrateLocalToCloud = migrateLocalToCloud;
