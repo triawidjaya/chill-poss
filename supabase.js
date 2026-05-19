@@ -588,6 +588,7 @@ const LOCAL_ONLY_KEYS = new Set([
   'pos_access_granted',
   'pos_staff',          // derived from users; cached locally for legacy callers
   'pos_migrated_v1',
+  'pos_session',        // per-device session — see AuthStorage below
   SB_CONFIG_KEY,
 ]);
 
@@ -693,17 +694,22 @@ const AuthStorage = {
     return true;
   },
 
+  // Per-device session: stored in localStorage (NOT in Supabase pos_session
+  // table). This lets cashier D log in on Computer A while admin A logs in on
+  // Computer B simultaneously, each device managing its own session.
+  // The legacy single-row pos_session table is now vestigial — safe to ignore
+  // or drop later.
   async getSession() {
-    return DataStore.session ? { ...DataStore.session } : null;
+    return _lsGet('pos_session', null);
   },
 
   async saveSession(s) {
-    await DataStore.saveSession(s);
+    _lsSet('pos_session', s);
     return true;
   },
 
   async clearSession() {
-    await DataStore.clearSession();
+    _lsSet('pos_session', null);
   },
 };
 

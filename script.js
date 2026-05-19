@@ -394,22 +394,9 @@ class ChillPOS {
       });
     });
 
-    DataStore.on('session', () => {
-      const cur = Auth.currentUser();
-      if (!cur) return;
-      // If remote session no longer matches us, force this device to login.
-      if (!DataStore.session || DataStore.session.userId !== cur.id) {
-        Auth._currentUser = null;
-        ['form-modal', 'settings-modal', 'users-modal',
-         'mulai-shift-modal', 'tutup-shift-modal'].forEach(id => {
-          const el = document.getElementById(id);
-          if (el) el.style.display = 'none';
-        });
-        this.applyAuthUI();
-        this.showLoginModal();
-        this.showAlert(t('remoteLogout'), 'info');
-      }
-    });
+    // Sessions are per-device (stored in localStorage), so we deliberately do
+    // NOT subscribe to remote session changes — logout on one device must not
+    // kick another device out.
 
     DataStore.on('settings', () => {
       this.brandName   = DataStore.settings.brand;

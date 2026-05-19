@@ -673,11 +673,12 @@ initTheme();          // sync — theme persisted in localStorage, doesn't need 
     return;
   }
   // Auth check — needs users + session loaded from Supabase
-  if (DataStore.users.length === 0 || !DataStore.session) {
+  const localSession = await AuthStorage.getSession();
+  if (DataStore.users.length === 0 || !localSession) {
     window.location.replace('index.html');
     return;
   }
-  const user = DataStore.users.find(u => u.id === DataStore.session.userId);
+  const user = DataStore.users.find(u => u.id === localSession.userId);
   if (!user) {
     window.location.replace('index.html');
     return;
