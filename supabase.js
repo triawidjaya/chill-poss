@@ -436,9 +436,15 @@ const DataStore = {
 
   // ── Category CRUD (full sync of name array) ──
   async saveCategories(categories) {
+    // Defensive copy: callers (e.g. saveSettings) pass `this.categories` by
+    // reference. Since we later reset the cache with `this.categories.length = 0`,
+    // iterating the original `categories` arg would walk an emptied array and
+    // wipe the local list. Snapshot first.
+    const input = [...categories];
+
     if (this.isLocal()) {
       this.categories.length = 0;
-      categories.forEach(n => this.categories.push(n));
+      input.forEach(n => this.categories.push(n));
       _lsSet('pos_categories', this.categories);
       this._fire('categories');
       return;
@@ -447,7 +453,7 @@ const DataStore = {
     const { data: existing, error: e1 } = await sb.from('pos_categories').select('id,name,sort_order,is_system');
     if (e1) throw e1;
     const existingByName = new Map((existing || []).map(c => [c.name, c]));
-    const newNames = new Set(categories);
+    const newNames = new Set(input);
 
     // Delete categories no longer in the list (skip system ones)
     const toDelete = (existing || []).filter(c => !newNames.has(c.name) && !c.is_system);
@@ -459,7 +465,7 @@ const DataStore = {
     // Insert new + update sort_order for moved ones
     const toInsert = [];
     const toUpdate = [];
-    categories.forEach((name, idx) => {
+    input.forEach((name, idx) => {
       const ex = existingByName.get(name);
       if (!ex) {
         toInsert.push({ name, sort_order: idx, is_system: name === 'START BALANCE' });
@@ -477,7 +483,7 @@ const DataStore = {
     }
 
     this.categories.length = 0;
-    categories.forEach(n => this.categories.push(n));
+    input.forEach(n => this.categories.push(n));
   },
 
   // ── User CRUD ──
