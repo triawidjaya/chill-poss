@@ -1672,7 +1672,8 @@ class ChillPOS {
       if (preferStaff === s) opt.selected = true;
       this.elements.fStaff.appendChild(opt);
     });
-    this.elements.fStaff.disabled = !!cur && cur.role === 'cashier';
+    // Lock for everyone — transaction always attributes to the logged-in user.
+    this.elements.fStaff.disabled = !!cur;
 
     this.elements.fMetode.value     = isEdit ? transaksi.metode     : 'Cash';
     this.elements.fDeskripsi.value  = isEdit ? transaksi.deskripsi  : '';
