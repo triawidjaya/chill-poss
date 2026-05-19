@@ -134,8 +134,21 @@ const toDbShift = (s) => ({
 // would break the shared reference and silently desync the UI.
 // ============================================================
 
+const MODE_KEY = 'pos_mode';   // 'local' | 'cloud'
+
 const DataStore = {
   hydrated: false,
+  _mode: null,                 // set via setMode() during bootstrap
+
+  setMode(mode) {
+    this._mode = mode;
+    try { localStorage.setItem(MODE_KEY, JSON.stringify(mode)); } catch {}
+  },
+  loadMode() {
+    try { return JSON.parse(localStorage.getItem(MODE_KEY)); } catch { return null; }
+  },
+  isLocal() { return this._mode === 'local'; },
+  isCloud() { return this._mode === 'cloud'; },
 
   transactions: [],
   shifts:       [],
@@ -177,6 +190,27 @@ const DataStore = {
   },
 
   async hydrate() {
+    if (this.isLocal()) return this._hydrateLocal();
+    return this._hydrateCloud();
+  },
+
+  _hydrateLocal() {
+    this.transactions.length = 0;
+    (_lsGet('pos_transactions', []) || []).forEach(t => this.transactions.push(t));
+    this.shifts.length = 0;
+    (_lsGet('pos_shift_history', []) || []).forEach(s => this.shifts.push(s));
+    this.categories.length = 0;
+    (_lsGet('pos_categories', []) || []).forEach(c => this.categories.push(c));
+    this.users.length = 0;
+    (_lsGet('pos_users', []) || []).forEach(u => this.users.push(u));
+    this.session = _lsGet('pos_session', null);
+    this.settings.brand       = _lsGet('pos_brand',        'My Business');
+    this.settings.lang        = _lsGet('pos_lang',         'en');
+    this.settings.shiftActive = _lsGet('pos_shift_active', false);
+    this.hydrated = true;
+  },
+
+  async _hydrateCloud() {
     const sb = getSupabase();
     const [txRes, shiftRes, catRes, userRes, sessRes, setRes] = await Promise.all([
       sb.from('pos_transactions').select('*').order('tanggal_waktu', { ascending: false }),
@@ -217,6 +251,7 @@ const DataStore = {
 
   // ── Realtime ──
   subscribeRealtime() {
+    if (this.isLocal()) return;   // no realtime in local mode
     const sb = getSupabase();
     sb.channel('pos-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pos_transactions' }, (p) => this._onTxChange(p))
@@ -301,12 +336,25 @@ const DataStore = {
 
   // ── Transaction CRUD ──
   async insertTransaction(tx) {
+    if (this.isLocal()) {
+      if (!this.transactions.some(t => t.id === tx.id)) this.transactions.unshift({ ...tx });
+      _lsSet('pos_transactions', this.transactions);
+      this._fire('transactions');
+      return;
+    }
     const { error } = await getSupabase().from('pos_transactions').insert([toDbTx(tx)]);
     if (error) throw error;
     if (!this.transactions.some(t => t.id === tx.id)) this.transactions.unshift({ ...tx });
   },
 
   async updateTransaction(tx) {
+    if (this.isLocal()) {
+      const idx = this.transactions.findIndex(t => t.id === tx.id);
+      if (idx !== -1) this.transactions[idx] = { ...tx };
+      _lsSet('pos_transactions', this.transactions);
+      this._fire('transactions');
+      return;
+    }
     const { error } = await getSupabase().from('pos_transactions').update(toDbTx(tx)).eq('id', tx.id);
     if (error) throw error;
     const idx = this.transactions.findIndex(t => t.id === tx.id);
@@ -314,6 +362,13 @@ const DataStore = {
   },
 
   async deleteTransaction(id) {
+    if (this.isLocal()) {
+      const idx = this.transactions.findIndex(t => t.id === id);
+      if (idx !== -1) this.transactions.splice(idx, 1);
+      _lsSet('pos_transactions', this.transactions);
+      this._fire('transactions');
+      return;
+    }
     const { error } = await getSupabase().from('pos_transactions').delete().eq('id', id);
     if (error) throw error;
     const idx = this.transactions.findIndex(t => t.id === id);
@@ -321,6 +376,12 @@ const DataStore = {
   },
 
   async clearTransactions() {
+    if (this.isLocal()) {
+      this.transactions.length = 0;
+      _lsSet('pos_transactions', this.transactions);
+      this._fire('transactions');
+      return;
+    }
     // .delete() requires a filter clause — neq an impossible UUID matches all rows.
     const { error } = await getSupabase().from('pos_transactions')
       .delete().neq('id', '00000000-0000-0000-0000-000000000000');
@@ -330,10 +391,16 @@ const DataStore = {
 
   // ── Shift CRUD ──
   async insertShift(shift) {
+    if (this.isLocal()) {
+      if (!this.shifts.some(s => s.id === shift.id)) this.shifts.unshift({ ...shift });
+      if (this.shifts.length > 50) this.shifts.splice(50);
+      _lsSet('pos_shift_history', this.shifts);
+      this._fire('shifts');
+      return;
+    }
     const { error } = await getSupabase().from('pos_shifts').insert([toDbShift(shift)]);
     if (error) throw error;
     if (!this.shifts.some(s => s.id === shift.id)) this.shifts.unshift({ ...shift });
-    // Enforce 50-max — delete oldest in DB if over.
     if (this.shifts.length > 50) {
       const toRemove = this.shifts.splice(50);
       const ids = toRemove.map(s => s.id);
@@ -345,6 +412,15 @@ const DataStore = {
 
   async deleteShifts(ids) {
     if (!ids || ids.length === 0) return;
+    if (this.isLocal()) {
+      const set = new Set(ids);
+      for (let i = this.shifts.length - 1; i >= 0; i--) {
+        if (set.has(this.shifts[i].id)) this.shifts.splice(i, 1);
+      }
+      _lsSet('pos_shift_history', this.shifts);
+      this._fire('shifts');
+      return;
+    }
     const { error } = await getSupabase().from('pos_shifts').delete().in('id', ids);
     if (error) throw error;
     const set = new Set(ids);
@@ -355,6 +431,13 @@ const DataStore = {
 
   // ── Category CRUD (full sync of name array) ──
   async saveCategories(categories) {
+    if (this.isLocal()) {
+      this.categories.length = 0;
+      categories.forEach(n => this.categories.push(n));
+      _lsSet('pos_categories', this.categories);
+      this._fire('categories');
+      return;
+    }
     const sb = getSupabase();
     const { data: existing, error: e1 } = await sb.from('pos_categories').select('id,name,sort_order,is_system');
     if (e1) throw e1;
@@ -394,6 +477,12 @@ const DataStore = {
 
   // ── User CRUD ──
   async insertUser(user) {
+    if (this.isLocal()) {
+      if (!this.users.some(u => u.id === user.id)) this.users.push({ ...user });
+      _lsSet('pos_users', this.users);
+      this._fire('users');
+      return { ...user };
+    }
     const { data, error } = await getSupabase().from('pos_users').insert([toDbUser(user)]).select().single();
     if (error) throw error;
     const created = toAppUser(data);
@@ -402,6 +491,17 @@ const DataStore = {
   },
 
   async updateUser(userId, updates) {
+    if (this.isLocal()) {
+      const idx = this.users.findIndex(x => x.id === userId);
+      if (idx !== -1) {
+        if ('username' in updates) this.users[idx].username = updates.username;
+        if ('pinHash'  in updates) this.users[idx].pinHash  = updates.pinHash;
+        if ('role'     in updates) this.users[idx].role     = updates.role;
+      }
+      _lsSet('pos_users', this.users);
+      this._fire('users');
+      return this.users[idx];
+    }
     const dbUpdates = {};
     if ('username' in updates) dbUpdates.username = updates.username;
     if ('pinHash'  in updates) dbUpdates.pin_hash = updates.pinHash;
@@ -415,6 +515,13 @@ const DataStore = {
   },
 
   async deleteUser(userId) {
+    if (this.isLocal()) {
+      const idx = this.users.findIndex(u => u.id === userId);
+      if (idx !== -1) this.users.splice(idx, 1);
+      _lsSet('pos_users', this.users);
+      this._fire('users');
+      return;
+    }
     const { error } = await getSupabase().from('pos_users').delete().eq('id', userId);
     if (error) throw error;
     const idx = this.users.findIndex(u => u.id === userId);
@@ -423,6 +530,12 @@ const DataStore = {
 
   // ── Session (single row id=1) ──
   async saveSession(session) {
+    if (this.isLocal()) {
+      this.session = { ...session };
+      _lsSet('pos_session', this.session);
+      this._fire('session');
+      return;
+    }
     const { error } = await getSupabase().from('pos_session')
       .update({ user_id: session.userId, login_at: session.loginAt }).eq('id', 1);
     if (error) throw error;
@@ -430,6 +543,12 @@ const DataStore = {
   },
 
   async clearSession() {
+    if (this.isLocal()) {
+      this.session = null;
+      _lsSet('pos_session', null);
+      this._fire('session');
+      return;
+    }
     const { error } = await getSupabase().from('pos_session')
       .update({ user_id: null, login_at: null }).eq('id', 1);
     if (error) throw error;
@@ -438,6 +557,13 @@ const DataStore = {
 
   // ── Settings ──
   async saveSetting(key, value) {
+    if (this.isLocal()) {
+      if      (key === 'brand')        { this.settings.brand       = value; _lsSet('pos_brand',        value); }
+      else if (key === 'lang')         { this.settings.lang        = value; _lsSet('pos_lang',         value); }
+      else if (key === 'shift_active') { this.settings.shiftActive = value; _lsSet('pos_shift_active', value); }
+      this._fire('settings');
+      return;
+    }
     const { error } = await getSupabase().from('pos_settings').upsert({ key, value });
     if (error) throw error;
     if      (key === 'brand')        this.settings.brand       = value;

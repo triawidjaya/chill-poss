@@ -275,8 +275,16 @@ class ChillPOS {
       this.showAccessGate();
       return;
     }
-    if (!SupabaseConfig.load()) {
-      // Dedicated cloud-pairing modal. After connect, bootstrap() runs again.
+    // Mode choice (Local Basic vs Cloud Premium) — persisted per browser.
+    let mode = DataStore.loadMode();
+    if (!mode) {
+      this.showModeChoiceModal();
+      return;
+    }
+    DataStore.setMode(mode);
+    this._applyModeBanner();
+
+    if (mode === 'cloud' && !SupabaseConfig.load()) {
       this.showSupabaseSetupModal();
       return;
     }
@@ -291,6 +299,28 @@ class ChillPOS {
     this._registerRealtimeListeners();
     this.renderAll();
     await this.bootstrapAuth();
+  }
+
+  // Show choose-your-mode modal. On click, save mode + restart bootstrap().
+  showModeChoiceModal() {
+    const modal = document.getElementById('mode-choice-modal');
+    modal.style.display = 'flex';
+    document.getElementById('mode-cloud-btn').onclick = () => {
+      DataStore.setMode('cloud');
+      modal.style.display = 'none';
+      this.bootstrap();
+    };
+    document.getElementById('mode-local-btn').onclick = () => {
+      DataStore.setMode('local');
+      modal.style.display = 'none';
+      this.bootstrap();
+    };
+  }
+
+  // Show or hide the local-mode warning banner above the header.
+  _applyModeBanner() {
+    const banner = document.getElementById('local-mode-banner');
+    if (banner) banner.style.display = DataStore.isLocal() ? 'block' : 'none';
   }
 
   // Show the dedicated cloud-pairing modal. On submit: validate, save config,

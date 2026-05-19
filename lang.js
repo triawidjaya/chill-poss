@@ -197,6 +197,14 @@ const STRINGS = {
     categoryExists:'Category already exists',
     systemBadge:'system',
     renameUserPrompt:'New username:',
+    // ── Mode choice (Local Basic vs Cloud Premium) ──
+    modeChoiceTitle:'Choose Mode',
+    modeChoiceHint:'Pick where your data should live. You can upgrade Local → Cloud later.',
+    modeLocal:'Local Mode',
+    modeLocalDesc:'Data stays in this browser only. No setup needed.',
+    modeCloud:'Cloud Mode',
+    modeCloudDesc:'Multi-device realtime sync. Needs a Supabase project.',
+    localModeBanner:'Local mode — data only in this browser. Export Excel regularly for backup.',
     // ── Supabase / cloud sync ──
     sbSetupTitle:'Connect to Cloud',
     sbSetupHint:'Paste your Supabase Project URL and Publishable Key. Same URL + key on every device = shared data.',
@@ -373,6 +381,14 @@ const STRINGS = {
     categoryExists:'Kategori sudah ada',
     systemBadge:'sistem',
     renameUserPrompt:'Nama pengguna baru:',
+    // ── Mode choice ──
+    modeChoiceTitle:'Pilih Mode',
+    modeChoiceHint:'Pilih dimana data disimpan. Bisa upgrade Local → Cloud nanti.',
+    modeLocal:'Mode Lokal',
+    modeLocalDesc:'Data hanya di browser ini. Tidak perlu setup apa pun.',
+    modeCloud:'Mode Cloud',
+    modeCloudDesc:'Sync realtime antar device. Perlu Supabase project.',
+    localModeBanner:'Mode lokal — data hanya di browser ini. Export Excel rutin untuk backup.',
     // ── Supabase / cloud sync ──
     sbSetupTitle:'Hubungkan ke Cloud',
     sbSetupHint:'Paste URL Project Supabase dan Publishable Key. URL + key sama di tiap device = data sharing.',

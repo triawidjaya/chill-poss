@@ -12,6 +12,10 @@
   (function(){try{document.body.className=(JSON.parse(localStorage.getItem('theme'))||'light')+'-theme';}catch(e){document.body.className='light-theme';}}());
 </script>
 
+<div id="local-mode-banner" style="display:none;background:#fef3c7;color:#78350f;padding:6px 12px;text-align:center;font-size:0.78rem;border-bottom:1px solid #fbbf24">
+  <i class="fas fa-laptop"></i> <span data-i18n="localModeBanner">Local mode — data only in this browser. Export Excel regularly for backup.</span>
+</div>
+
 <div class="container">
 
   <header>
@@ -130,6 +134,33 @@
         </button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- Mode Choice Modal — pick Local (Basic) or Cloud (Premium) -->
+<div class="modal" id="mode-choice-modal">
+  <div class="modal-content small">
+    <h2><i class="fas fa-route" style="color:var(--primary)"></i>
+        <span data-i18n="modeChoiceTitle">Choose Mode</span></h2>
+    <p class="wizard-hint" data-i18n="modeChoiceHint">
+      Pick where your data should live. You can upgrade Local → Cloud later.
+    </p>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-top:14px">
+      <button type="button" class="btn primary" id="mode-cloud-btn" style="padding:14px;text-align:left;justify-content:flex-start">
+        <i class="fas fa-cloud" style="font-size:1.4rem;margin-right:10px"></i>
+        <div style="flex:1">
+          <div style="font-weight:600"><span data-i18n="modeCloud">Cloud Mode</span> <span style="background:#fbbf24;color:#78350f;font-size:0.65rem;padding:1px 6px;border-radius:10px;margin-left:6px;vertical-align:middle">PREMIUM</span></div>
+          <div style="font-size:0.78rem;opacity:0.85;margin-top:2px;font-weight:400" data-i18n="modeCloudDesc">Multi-device realtime sync. Needs a Supabase project.</div>
+        </div>
+      </button>
+      <button type="button" class="btn" id="mode-local-btn" style="padding:14px;text-align:left;justify-content:flex-start;background:var(--card-bg);border:1px solid var(--border-color)">
+        <i class="fas fa-laptop" style="font-size:1.4rem;margin-right:10px;color:var(--gray)"></i>
+        <div style="flex:1">
+          <div style="font-weight:600"><span data-i18n="modeLocal">Local Mode</span> <span style="background:#a7f3d0;color:#065f46;font-size:0.65rem;padding:1px 6px;border-radius:10px;margin-left:6px;vertical-align:middle">BASIC</span></div>
+          <div style="font-size:0.78rem;opacity:0.85;margin-top:2px;font-weight:400" data-i18n="modeLocalDesc">Data stays in this browser only. No setup needed.</div>
+        </div>
+      </button>
+    </div>
   </div>
 </div>
 

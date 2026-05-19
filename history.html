@@ -655,14 +655,20 @@ initTheme();          // sync — theme persisted in localStorage, doesn't need 
 
 // Async bootstrap: check config → hydrate → auth → bind data → realtime → render.
 (async function init() {
-  if (!SupabaseConfig.load()) {
+  const mode = DataStore.loadMode();
+  if (!mode) {
+    window.location.replace('index.html');
+    return;
+  }
+  DataStore.setMode(mode);
+  if (mode === 'cloud' && !SupabaseConfig.load()) {
     window.location.replace('index.html');
     return;
   }
   try {
     await DataStore.hydrate();
   } catch (e) {
-    alert(`Cloud connection failed: ${e?.message || e}\nRedirecting back to setup.`);
+    alert(`Connection failed: ${e?.message || e}\nRedirecting back to setup.`);
     window.location.replace('index.html');
     return;
   }
