@@ -641,10 +641,32 @@ class ChillPOS {
     const users = await AuthStorage.getUsers();
     this.staffList = users.map(u => u.username);
     Storage.set('pos_staff', this.staffList);
-    // Reflect in Settings textarea if it's open
+    // Reflect in Settings list if it's open
     if (this.elements.settingsModal.style.display === 'flex') {
-      this.elements.settingsStaff.value = this.staffList.join('\n');
+      this.renderStaffList();
     }
+  }
+
+  // Renders the read-only staff list (card style, parallels renderCategoriesList).
+  // Source of truth = DataStore.users so role badges stay correct without
+  // an extra lookup. "Manage Users" remains the only mutation entrypoint.
+  renderStaffList() {
+    const list = this.elements.settingsStaffList;
+    if (!list) return;
+    list.innerHTML = '';
+    const cur = Auth.currentUser();
+    DataStore.users.forEach(u => {
+      const isSelf = cur?.id === u.id;
+      const row = document.createElement('div');
+      row.className = 'cat-row';
+      row.style.cursor = 'default';
+      row.innerHTML = `
+        <i class="fas fa-user cat-lock" title="${this.escapeHtml(t('staffViewOnly'))}"></i>
+        <span class="cat-name">${this.escapeHtml(u.username)}${isSelf ? ' <small style="color:var(--gray);font-weight:400">(you)</small>' : ''}</span>
+        <span class="role-badge role-${u.role}" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;font-weight:600">${this.escapeHtml(t(u.role === 'admin' ? 'roleAdmin' : 'roleCashier'))}</span>
+      `;
+      list.appendChild(row);
+    });
   }
 
   // ============================================================
@@ -971,7 +993,7 @@ class ChillPOS {
       fKeterangan:  document.getElementById('f-keterangan'),
       // Settings fields (categories handled via card UI, not a single textarea)
       settingsBrand:      document.getElementById('settings-brand'),
-      settingsStaff:      document.getElementById('settings-staff'),
+      settingsStaffList:  document.getElementById('settings-staff-list'),
       // Start Shift modal
       mulaiShiftModal: document.getElementById('mulai-shift-modal'),
       mulaiShiftForm:  document.getElementById('mulai-shift-form'),
@@ -1841,8 +1863,8 @@ class ChillPOS {
       (DataStore.isLocal() && Auth.can(PERMISSIONS.MANAGE_SETTINGS)) ? '' : 'none';
     this.renderCategoriesList();
     this.renderAdminCategoriesList();
+    this.renderStaffList();
     this.elements.settingsBrand.value = this.brandName;
-    this.elements.settingsStaff.value = this.staffList.join('\n');   // view-only mirror
     this.elements.settingsModal.style.display = 'flex';
   }
 
