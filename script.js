@@ -1650,19 +1650,32 @@ class ChillPOS {
     this.setActiveType(isEdit && transaksi.jenis === 'OUTGOING' ? 'outgoing' : 'income');
 
     // Populate category dropdown — exclude system categories (e.g. START BALANCE
-    // is only inserted automatically at shift start, never picked manually)
+    // is only inserted automatically at shift start, never picked manually).
+    // Exception: when editing a system-category tx, inject it as the sole
+    // option and lock the dropdown so the category can't be drifted.
     this.elements.fKategori.innerHTML = '';
-    this.categories
-      .filter(cat => !SYSTEM_CATEGORIES.includes(cat))
-      .forEach(cat => {
-        const opt = document.createElement('option');
-        opt.value = cat; opt.textContent = cat;
-        if (isEdit && transaksi.kategori === cat) opt.selected = true;
-        this.elements.fKategori.appendChild(opt);
-      });
-    const otherOpt = document.createElement('option');
-    otherOpt.value = '_other'; otherOpt.textContent = t('other');
-    this.elements.fKategori.appendChild(otherOpt);
+    this.elements.fKategori.disabled = false;
+    const editingSystemTx = isEdit && SYSTEM_CATEGORIES.includes(transaksi.kategori);
+
+    if (editingSystemTx) {
+      const opt = document.createElement('option');
+      opt.value = transaksi.kategori; opt.textContent = transaksi.kategori;
+      opt.selected = true;
+      this.elements.fKategori.appendChild(opt);
+      this.elements.fKategori.disabled = true;
+    } else {
+      this.categories
+        .filter(cat => !SYSTEM_CATEGORIES.includes(cat))
+        .forEach(cat => {
+          const opt = document.createElement('option');
+          opt.value = cat; opt.textContent = cat;
+          if (isEdit && transaksi.kategori === cat) opt.selected = true;
+          this.elements.fKategori.appendChild(opt);
+        });
+      const otherOpt = document.createElement('option');
+      otherOpt.value = '_other'; otherOpt.textContent = t('other');
+      this.elements.fKategori.appendChild(otherOpt);
+    }
 
     // Populate staff dropdown — default to current user, lock for cashier
     this.elements.fStaff.innerHTML = '';
@@ -1703,7 +1716,14 @@ class ChillPOS {
     if (adminCats.includes(category)) return true;
     if (editId) {
       const orig = this.transactions.find(t => t.id === editId);
-      if (orig && /\[approved by /i.test(orig.keterangan || '')) return true;
+      if (orig) {
+        // Edits to a system-category tx (e.g. START BALANCE — the opening cash
+        // row created at shift start) always require admin PIN, regardless of
+        // the new category chosen. Closes the loophole where a cashier could
+        // alter the opening balance to mask a cash shortfall.
+        if (SYSTEM_CATEGORIES.includes(orig.kategori)) return true;
+        if (/\[approved by /i.test(orig.keterangan || '')) return true;
+      }
     }
     return false;
   }
