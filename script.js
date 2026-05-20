@@ -1997,16 +1997,20 @@ class ChillPOS {
   // Reset only resets brand & categories. Staff/users are NEVER touched here
   // — that would orphan all auth + lose all logins. Use Manage Users for users.
   resetSettings() {
-    this.brandName = DEFAULT_BRAND;
-    // Mutate categories in place to preserve shared reference with DataStore.categories.
-    this.categories.length = 0;
-    DEFAULT_CATEGORIES.forEach(c => this.categories.push(c));
-    Storage.set('pos_brand',      this.brandName);
-    Storage.set('pos_categories', this.categories);
-    this.renderBrandName();
-    this.renderCategoriesList();
-    this.hideSettings();
-    this.showAlert(t('alertSettingsReset'), 'info');
+    // Destructive: wipes brand + categories back to defaults. Gate behind the
+    // logged-in admin's PIN so a stray click can't blow away the config.
+    this.showConfirm(t('confirmResetDefault'), () => {
+      this.brandName = DEFAULT_BRAND;
+      // Mutate categories in place to preserve shared reference with DataStore.categories.
+      this.categories.length = 0;
+      DEFAULT_CATEGORIES.forEach(c => this.categories.push(c));
+      Storage.set('pos_brand',      this.brandName);
+      Storage.set('pos_categories', this.categories);
+      this.renderBrandName();
+      this.renderCategoriesList();
+      this.hideSettings();
+      this.showAlert(t('alertSettingsReset'), 'info');
+    }, false, true);
   }
 
   saveSettings() {
@@ -2367,21 +2371,42 @@ class ChillPOS {
   // MODALS
   // ============================================================
 
-  showConfirm(message, callback, isHtml = false) {
+  showConfirm(message, callback, isHtml = false, requirePin = false) {
     const el = document.getElementById('confirm-message');
     isHtml ? (el.innerHTML = message) : (el.textContent = message);
+    this.confirmRequirePin = requirePin;
+    const pinWrap  = document.getElementById('confirm-pin-wrap');
+    const pinInput = document.getElementById('confirm-pin');
+    if (pinWrap)  pinWrap.style.display = requirePin ? 'block' : 'none';
+    if (pinInput) pinInput.value = '';
     this.elements.confirmModal.style.display = 'flex';
     this.confirmAction = callback;
+    if (requirePin) setTimeout(() => pinInput?.focus(), 50);
   }
 
   hideConfirm() {
     this.elements.confirmModal.style.display = 'none';
     this.confirmAction = null;
+    this.confirmRequirePin = false;
+    const pinWrap = document.getElementById('confirm-pin-wrap');
+    if (pinWrap) pinWrap.style.display = 'none';
   }
 
-  executeConfirm() {
-    if (this.confirmAction) this.confirmAction();
+  async executeConfirm() {
+    // PIN-gated confirms (e.g. Reset Default) require the logged-in admin's PIN.
+    if (this.confirmRequirePin) {
+      const pin  = document.getElementById('confirm-pin').value;
+      const user = Auth.currentUser();
+      if (!user || user.role !== 'admin' || !(await Auth.verifyPin(user, pin))) {
+        this.showAlert(t('resetPinWrong'), 'error');
+        const inp = document.getElementById('confirm-pin');
+        inp.value = ''; inp.focus();
+        return; // keep modal open
+      }
+    }
+    const action = this.confirmAction;
     this.hideConfirm();
+    if (action) await action();
   }
 
   showAlert(message, type = 'info') {
