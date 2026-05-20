@@ -71,6 +71,43 @@
     </button>
   </div>
 
+  <!-- FILTER PANEL (Hidden by default) -->
+  <div id="filter-panel" class="filter-panel" style="display:none">
+    <div class="filter-controls">
+      <div class="filter-group">
+        <label for="filter-type" data-i18n="filterType">Type</label>
+        <select id="filter-type">
+          <option value="">-- All --</option>
+          <option value="INCOME" data-i18n="income">Income</option>
+          <option value="OUTGOING" data-i18n="outgoing">Outgoing</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="filter-category" data-i18n="filterCategory">Category</label>
+        <select id="filter-category">
+          <option value="">-- All --</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="filter-method" data-i18n="filterMethod">Method</label>
+        <select id="filter-method">
+          <option value="">-- All --</option>
+          <option value="Cash">Cash</option>
+          <option value="Card">Card</option>
+          <option value="Transfer">Transfer</option>
+          <option value="Qris">Qris</option>
+        </select>
+      </div>
+
+      <div class="filter-actions">
+        <button id="apply-filter" class="btn primary" data-i18n="applyFilter">Apply Filter</button>
+        <button id="reset-filter" class="btn" data-i18n="resetFilter">Reset</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Mobile card view (auto-shown < 769px) -->
   <div class="cards-container" id="transaksi-cards"></div>
 

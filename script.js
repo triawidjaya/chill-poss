@@ -270,6 +270,7 @@ class ChillPOS {
     this.currentEditId = null;
     this.confirmAction = null;
     this.sortState     = { kolom: 'tanggalWaktu', arah: 'desc' };
+    this.filterState   = { type: '', category: '', method: '' };
 
     this.initElements();
     this.initEventListeners();
@@ -1189,6 +1190,35 @@ class ChillPOS {
         this.renderTransaksiTable();
       });
 
+    // Filter Panel — Toggle with chili icon
+    document.getElementById('toggle-header').addEventListener('click', (e) => {
+      // Check if chili icon was clicked (avoid conflict with header hide/show)
+      if (e.target.closest('.pepper-icon')) {
+        e.stopPropagation();
+        const panel = document.getElementById('filter-panel');
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+      }
+    });
+
+    // Filter — Apply button
+    document.getElementById('apply-filter').addEventListener('click', () => {
+      this.filterState.type = document.getElementById('filter-type').value;
+      this.filterState.category = document.getElementById('filter-category').value;
+      this.filterState.method = document.getElementById('filter-method').value;
+      this.renderTransaksiTable();
+    });
+
+    // Filter — Reset button
+    document.getElementById('reset-filter').addEventListener('click', () => {
+      document.getElementById('filter-type').value = '';
+      document.getElementById('filter-category').value = '';
+      document.getElementById('filter-method').value = '';
+      this.filterState.type = '';
+      this.filterState.category = '';
+      this.filterState.method = '';
+      this.renderTransaksiTable();
+    });
+
     // Event delegation for edit/delete — works for both table rows AND cards
     const txClickHandler = (e) => {
       const editBtn  = e.target.closest('.btn-edit');
@@ -1547,6 +1577,7 @@ class ChillPOS {
     this.renderBrandName();
     this.renderDashboard();
     this.renderTransaksiTable();
+    this.populateCategoryFilter();
     this.updateDownloadButton();
     if (typeof this.updateShiftUI === 'function') this.updateShiftUI();
   }
@@ -1601,6 +1632,17 @@ class ChillPOS {
   getVisibleTransactions() {
     let txs = this.transactions;
 
+    // Apply filters
+    if (this.filterState.type) {
+      txs = txs.filter(tx => tx.jenis === this.filterState.type);
+    }
+    if (this.filterState.category) {
+      txs = txs.filter(tx => tx.kategori === this.filterState.category);
+    }
+    if (this.filterState.method) {
+      txs = txs.filter(tx => tx.metode === this.filterState.method);
+    }
+
     const { kolom, arah } = this.sortState;
     return txs.slice().sort((a, b) => {
       let va = a[kolom], vb = b[kolom];
@@ -1611,6 +1653,21 @@ class ChillPOS {
       if (va > vb) return arah === 'asc' ?  1 : -1;
       return 0;
     });
+  }
+
+  // Populate category dropdown in filter panel
+  populateCategoryFilter() {
+    const select = document.getElementById('filter-category');
+    if (!select) return;
+    const currentValue = select.value;
+    select.innerHTML = '<option value="">-- All --</option>';
+    this.categories.forEach(cat => {
+      const option = document.createElement('option');
+      option.value = cat;
+      option.textContent = cat;
+      select.appendChild(option);
+    });
+    select.value = currentValue;
   }
 
   // Dispatcher: pick table or card layout based on viewport.
