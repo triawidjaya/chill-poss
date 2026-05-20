@@ -303,9 +303,9 @@ th[data-kolom] .fa-sort-down { opacity: 1; }
   .table-container { display: none; }
   .cards-container { display: flex; }
 
-  /* Header tweaks for narrow screens */
-  header h1 { font-size: 1.1rem; }
-  #brand-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle; }
+  /* Header tweaks for narrow screens — let long brand names wrap instead of truncating */
+  header h1 { font-size: 1.1rem; flex: 1; min-width: 0; line-height: 1.25; }
+  #brand-name { overflow-wrap: anywhere; }
   .header-actions { gap: 6px; }
   .theme-toggle { width: 36px; height: 36px; }
   #toggle-header { width: 36px; height: 36px; }
@@ -313,7 +313,6 @@ th[data-kolom] .fa-sort-down { opacity: 1; }
 
 @media (max-width: 480px) {
   .current-date { display: none; }
-  #brand-name { max-width: 120px; }
   .theme-toggle { width: 32px; height: 32px; }
   #toggle-header { width: 32px; height: 32px; }
   header h1 { font-size: 0.95rem; }
