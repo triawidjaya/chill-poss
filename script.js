@@ -1190,10 +1190,11 @@ class ChillPOS {
         this.renderTransaksiTable();
       });
 
-    // Filter Panel — Toggle with chili icon
+    // Filter Panel — Toggle with chili icon (ONLY toggle filter, not header)
     document.getElementById('toggle-header').addEventListener('click', (e) => {
-      // Check if chili icon was clicked (avoid conflict with header hide/show)
-      if (e.target.closest('.pepper-icon')) {
+      const pepperIcon = e.target.closest('.pepper-icon');
+      if (pepperIcon && !pepperIcon.classList.contains('flipped')) {
+        // Only toggle filter if header is NOT hidden (flipped state = header hidden)
         e.stopPropagation();
         const panel = document.getElementById('filter-panel');
         panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
@@ -1655,13 +1656,17 @@ class ChillPOS {
     });
   }
 
-  // Populate category dropdown in filter panel
+  // Populate category dropdown with ONLY categories that exist in current transactions
   populateCategoryFilter() {
     const select = document.getElementById('filter-category');
     if (!select) return;
     const currentValue = select.value;
+
+    // Get unique categories from current transactions
+    const categoriesInData = [...new Set(this.transactions.map(tx => tx.kategori))].sort();
+
     select.innerHTML = '<option value="">-- All --</option>';
-    this.categories.forEach(cat => {
+    categoriesInData.forEach(cat => {
       const option = document.createElement('option');
       option.value = cat;
       option.textContent = cat;
