@@ -745,22 +745,22 @@ async function migrateLocalToCloud(url, key) {
     auth: { persistSession: false },
   });
 
-  // 1. Verify target project is fresh — refuse to overwrite existing data.
-  const [brandRes, usersRes, txRes] = await Promise.all([
-    client.from('pos_settings').select('value').eq('key', 'brand').maybeSingle(),
+  // 1. Verify target project has no real data — refuse to overwrite.
+  // Only users / transactions / shifts matter. Brand is intentionally NOT
+  // checked: it's overwritten by the migration anyway, and a leftover brand
+  // from a prior wizard run shouldn't block an otherwise-empty project.
+  const [usersRes, txRes, shiftRes] = await Promise.all([
     client.from('pos_users').select('id', { count: 'exact', head: true }),
     client.from('pos_transactions').select('id', { count: 'exact', head: true }),
+    client.from('pos_shifts').select('id', { count: 'exact', head: true }),
   ]);
-  if (brandRes.error) throw new Error(`Cloud check failed: ${brandRes.error.message}`);
   if (usersRes.error) throw new Error(`Cloud check failed: ${usersRes.error.message}`);
   if (txRes.error)    throw new Error(`Cloud check failed: ${txRes.error.message}`);
+  if (shiftRes.error) throw new Error(`Cloud check failed: ${shiftRes.error.message}`);
 
-  const targetBrand = brandRes.data?.value;
-  const targetUserCount = usersRes.count ?? 0;
-  const targetTxCount   = txRes.count ?? 0;
-  const isFresh = (!targetBrand || targetBrand === 'My Business')
-               && targetUserCount === 0
-               && targetTxCount   === 0;
+  const isFresh = (usersRes.count ?? 0) === 0
+               && (txRes.count ?? 0)    === 0
+               && (shiftRes.count ?? 0) === 0;
   if (!isFresh) throw new Error('cloudNotEmpty');
 
   // 2. Snapshot local data (DataStore is still in local mode).
