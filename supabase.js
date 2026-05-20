@@ -605,6 +605,7 @@ const LOCAL_ONLY_KEYS = new Set([
   'theme',
   'pos_lang',
   'pos_header_hidden',
+  'pos_filter_visible',
   'pos_access_granted',
   'pos_staff',          // derived from users; cached locally for legacy callers
   'pos_migrated_v1',

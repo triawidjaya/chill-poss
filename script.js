@@ -1049,18 +1049,20 @@ class ChillPOS {
     document.getElementById('settings-help').addEventListener('click', () => this.showHelp());
     document.getElementById('close-help').addEventListener('click',    () => this.hideHelp());
 
-    // Header-actions toggle — single fixed button, swap eye icon based on state
+    // Chili icon — toggles the filter panel only. The menu/icons row stays visible.
     const toggleBtn = document.getElementById('toggle-header');
-    const setHeaderHidden = (hidden) => {
-      document.body.classList.toggle('header-hidden', hidden);
-      Storage.set('pos_header_hidden', hidden);
-      toggleBtn.querySelector('.pepper-icon').classList.toggle('flipped', hidden);
-      toggleBtn.title = hidden ? 'Show header' : 'Hide header';
+    const filterPanel = document.getElementById('filter-panel');
+    const setFilterVisible = (visible) => {
+      if (filterPanel) filterPanel.style.display = visible ? 'block' : 'none';
+      Storage.set('pos_filter_visible', visible);
+      toggleBtn.querySelector('.pepper-icon').classList.toggle('flipped', !visible);
+      toggleBtn.title = visible ? 'Hide filter' : 'Show filter';
     };
     toggleBtn.addEventListener('click', () => {
-      setHeaderHidden(!document.body.classList.contains('header-hidden'));
+      setFilterVisible(!filterPanel || filterPanel.style.display === 'none');
     });
-    if (Storage.get('pos_header_hidden', false)) setHeaderHidden(true);
+    // Default: filter hidden until the chili is clicked.
+    setFilterVisible(Storage.get('pos_filter_visible', false));
 
     // Action bar
     this.elements.newTransaksiBtn.addEventListener('click', () => {
@@ -1189,17 +1191,6 @@ class ChillPOS {
         this.sortState.kolom = kolom;
         this.renderTransaksiTable();
       });
-
-    // Filter Panel — Toggle with chili icon (ONLY toggle filter, not header)
-    document.getElementById('toggle-header').addEventListener('click', (e) => {
-      const pepperIcon = e.target.closest('.pepper-icon');
-      if (pepperIcon && !pepperIcon.classList.contains('flipped')) {
-        // Only toggle filter if header is NOT hidden (flipped state = header hidden)
-        e.stopPropagation();
-        const panel = document.getElementById('filter-panel');
-        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-      }
-    });
 
     // Filter — Apply button
     document.getElementById('apply-filter').addEventListener('click', () => {
