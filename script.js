@@ -1049,20 +1049,22 @@ class ChillPOS {
     document.getElementById('settings-help').addEventListener('click', () => this.showHelp());
     document.getElementById('close-help').addEventListener('click',    () => this.hideHelp());
 
-    // Chili icon — toggles the filter panel only. The menu/icons row stays visible.
+    // Chili icon — hides/shows the menu icons row AND the filter panel together
+    // as one unit. Single listener, no competing toggles.
     const toggleBtn = document.getElementById('toggle-header');
     const filterPanel = document.getElementById('filter-panel');
-    const setFilterVisible = (visible) => {
-      if (filterPanel) filterPanel.style.display = visible ? 'block' : 'none';
-      Storage.set('pos_filter_visible', visible);
-      toggleBtn.querySelector('.pepper-icon').classList.toggle('flipped', !visible);
-      toggleBtn.title = visible ? 'Hide filter' : 'Show filter';
+    const setHeaderHidden = (hidden) => {
+      document.body.classList.toggle('header-hidden', hidden);
+      Storage.set('pos_header_hidden', hidden);
+      if (filterPanel) filterPanel.style.display = hidden ? 'none' : 'block';
+      toggleBtn.querySelector('.pepper-icon').classList.toggle('flipped', hidden);
+      toggleBtn.title = hidden ? 'Show menu' : 'Hide menu';
     };
     toggleBtn.addEventListener('click', () => {
-      setFilterVisible(!filterPanel || filterPanel.style.display === 'none');
+      setHeaderHidden(!document.body.classList.contains('header-hidden'));
     });
-    // Default: filter hidden until the chili is clicked.
-    setFilterVisible(Storage.get('pos_filter_visible', false));
+    // Default: both visible (matches the normal app appearance).
+    setHeaderHidden(Storage.get('pos_header_hidden', false));
 
     // Action bar
     this.elements.newTransaksiBtn.addEventListener('click', () => {
