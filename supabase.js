@@ -791,7 +791,16 @@ async function migrateLocalToCloud(url, key) {
   }
 
   if (localUsers.length > 0) {
-    const { error } = await client.from('pos_users').insert(localUsers.map(toDbUser));
+    // Legacy local data may have "usr_<uuid>" ids, which the UUID column
+    // rejects. Drop any non-UUID id and let Postgres generate a fresh one.
+    // Transactions/shifts attribute by username (TEXT), not id, so this is safe.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const rows = localUsers.map(u => {
+      const row = toDbUser(u);
+      if (!UUID_RE.test(row.id || '')) delete row.id;
+      return row;
+    });
+    const { error } = await client.from('pos_users').insert(rows);
     if (error) throw new Error(`Users migrate failed: ${error.message}`);
   }
   if (localTxs.length > 0) {
@@ -802,11 +811,9 @@ async function migrateLocalToCloud(url, key) {
     const { error } = await client.from('pos_shifts').insert(localShifts.map(toDbShift));
     if (error) throw new Error(`Shifts migrate failed: ${error.message}`);
   }
-  if (localSession?.userId) {
-    const { error } = await client.from('pos_session')
-      .update({ user_id: localSession.userId, login_at: localSession.loginAt }).eq('id', 1);
-    if (error) throw new Error(`Session migrate failed: ${error.message}`);
-  }
+  // Session is intentionally NOT migrated: legacy ids may have been regenerated
+  // above, so the local session id might not match. The user simply signs in
+  // once after the reload — a minor, one-time step.
 
   return {
     transactions: localTxs.length,
