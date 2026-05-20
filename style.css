@@ -39,7 +39,7 @@ body { background-color: var(--bg-color); color: var(--text-color); line-height:
 
 .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
 
-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--border-color); margin-top: 10px; }
+header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; margin-top: 10px; padding: 14px 18px; background: #0D0950; border-radius: 12px; }
 
 /* Menu row wrapper — contains only header-actions icons */
 .header-actions-wrap {
@@ -67,29 +67,41 @@ body.header-hidden .header-actions-wrap {
   gap: 10px;
 }
 
-/* Toggle button lives in header */
+/* Toggle button lives in header — icon only, no box/border on the blue header */
 #toggle-header {
   flex-shrink: 0;
   width: 40px;
   height: 40px;
+  background: transparent;
+  border: none;
+  color: #fff;
 }
+#toggle-header:hover { background: transparent; }
 
-.pepper-icon { position: relative; display: inline-flex; }
-.pepper-icon:not(.slashed) i { color: #e53e3e; }
-.pepper-icon.slashed::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 140%;
-  height: 2px;
-  background: currentColor;
-  transform: translate(-50%, -50%) rotate(-45deg);
-  border-radius: 1px;
-}
+.pepper-icon { position: relative; display: inline-flex; transition: transform 0.2s ease; }
+.pepper-icon i { color: #e53e3e; }
+/* Flip the chilli horizontally to signal header state: faces left when hidden, right when shown. */
+.pepper-icon.flipped { transform: scaleX(-1); }
 
-header h1 { color: var(--primary); display: flex; align-items: center; gap: 10px; }
+header h1 { color: #fff; display: flex; align-items: center; gap: 10px; }
 .brand-logo { height: 1.2em; width: auto; object-fit: contain; }
+/* Header sits on a fixed blue background in every theme, so its controls are forced to a light/contrasting palette. */
+header .theme-toggle { background: transparent; color: #fff; border-color: rgba(255,255,255,0.4); }
+header .theme-toggle:hover { background-color: rgba(255,255,255,0.18); color: #fff; }
+
+#app-footer {
+  text-align: center;
+  padding: 24px 16px;
+  margin-top: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+#app-footer .footer-logo { height: 2.5em; width: auto; object-fit: contain; opacity: 0.85; }
+#app-footer .footer-copy { font-size: 0.75rem; color: var(--gray); }
+#app-footer .footer-copy a { color: inherit; text-decoration: none; }
+#app-footer .footer-copy a:hover { text-decoration: underline; }
 
 .current-date {
   background: none;

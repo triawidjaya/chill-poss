@@ -160,6 +160,7 @@ const DataStore = {
     lang:            'en',
     shiftActive:     false,
     adminCategories: [],   // category names that require admin PIN to record
+    logoData:        null, // base64 PNG of custom logo (cloud only); null = use static logo.png
   },
 
   _listeners: {
@@ -188,6 +189,7 @@ const DataStore = {
     this.settings.lang            = 'en';
     this.settings.shiftActive     = false;
     this.settings.adminCategories = [];
+    this.settings.logoData        = null;
     this.hydrated = false;
   },
 
@@ -210,6 +212,7 @@ const DataStore = {
     this.settings.lang            = _lsGet('pos_lang',              'en');
     this.settings.shiftActive     = _lsGet('pos_shift_active',      false);
     this.settings.adminCategories = _lsGet('pos_admin_categories',  []);
+    this.settings.logoData        = _lsGet('pos_logo_data',         null);
     this.hydrated = true;
   },
 
@@ -249,6 +252,7 @@ const DataStore = {
     this.settings.lang            = map.lang             ?? 'en';
     this.settings.shiftActive     = map.shift_active     ?? false;
     this.settings.adminCategories = map.admin_categories ?? [];
+    this.settings.logoData        = map.logo_data        ?? null;
 
     this.hydrated = true;
   },
@@ -336,6 +340,7 @@ const DataStore = {
     else if (key === 'lang')             this.settings.lang            = value;
     else if (key === 'shift_active')     this.settings.shiftActive     = value;
     else if (key === 'admin_categories') this.settings.adminCategories = value;
+    else if (key === 'logo_data')        this.settings.logoData        = value;
     this._fire('settings');
   },
 
@@ -573,6 +578,7 @@ const DataStore = {
       else if (key === 'lang')             { this.settings.lang            = value; _lsSet('pos_lang',              value); }
       else if (key === 'shift_active')     { this.settings.shiftActive     = value; _lsSet('pos_shift_active',      value); }
       else if (key === 'admin_categories') { this.settings.adminCategories = value; _lsSet('pos_admin_categories',  value); }
+      else if (key === 'logo_data')        { this.settings.logoData       = value; _lsSet('pos_logo_data',         value); }
       this._fire('settings');
       return;
     }
@@ -582,6 +588,7 @@ const DataStore = {
     else if (key === 'lang')             this.settings.lang            = value;
     else if (key === 'shift_active')     this.settings.shiftActive     = value;
     else if (key === 'admin_categories') this.settings.adminCategories = value;
+    else if (key === 'logo_data')        this.settings.logoData        = value;
   },
 };
 

@@ -55,6 +55,26 @@ const DEFAULT_CATEGORIES = ['START BALANCE', 'Sales', 'Refund', 'Expense', 'Othe
 const DEFAULT_STAFF      = ['Staff 1'];
 const DEFAULT_BRAND      = 'My Business';
 
+// Resize an uploaded image to fit maxW×maxH (aspect preserved) and return a
+// base64 PNG data URL. Runs entirely in-browser via Canvas — no upload needed.
+function resizeLogoToBase64(file, maxW = 300, maxH = 150) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const scale = Math.min(1, maxW / img.width, maxH / img.height);
+      const canvas = document.createElement('canvas');
+      canvas.width  = Math.max(1, Math.round(img.width  * scale));
+      canvas.height = Math.max(1, Math.round(img.height * scale));
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Invalid image file')); };
+    img.src = url;
+  });
+}
+
 // Access gate — change this code to restrict who can use the app
 const APP_ACCESS_CODE    = 'smallbutspicy';
 const STORAGE_KEY_ACCESS = 'pos_access_granted';
@@ -1033,7 +1053,7 @@ class ChillPOS {
     const setHeaderHidden = (hidden) => {
       document.body.classList.toggle('header-hidden', hidden);
       Storage.set('pos_header_hidden', hidden);
-      toggleBtn.querySelector('.pepper-icon').classList.toggle('slashed', !hidden);
+      toggleBtn.querySelector('.pepper-icon').classList.toggle('flipped', hidden);
       toggleBtn.title = hidden ? 'Show header' : 'Hide header';
     };
     toggleBtn.addEventListener('click', () => {
@@ -1083,6 +1103,21 @@ class ChillPOS {
     // Settings
     document.getElementById('settings-save').addEventListener('click',  () => this.saveSettings());
     document.getElementById('settings-reset').addEventListener('click', () => this.resetSettings());
+
+    // Live preview of the resized logo when a file is picked.
+    document.getElementById('settings-logo').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      const preview = document.getElementById('settings-logo-preview');
+      if (!file) { preview.style.display = 'none'; return; }
+      try {
+        preview.src = await resizeLogoToBase64(file);
+        preview.style.display = 'block';
+      } catch {
+        this.showAlert(t('alertInvalidImage'), 'error');
+        e.target.value = '';
+        preview.style.display = 'none';
+      }
+    });
 
     // Categories card UI: Add button + delegated edit/delete + drag-and-drop
     document.getElementById('add-category-btn').addEventListener('click', () => this.addCategoryFlow());
@@ -1250,9 +1285,10 @@ class ChillPOS {
       }
     });
 
-    // Click outside modal to close
+    // Click outside modal to close. The New Transaction form is intentionally
+    // excluded — it can only be dismissed via Cancel or the X to avoid losing
+    // half-entered data on a stray click.
     window.addEventListener('click', (e) => {
-      if (e.target === this.elements.formModal)       this.hideForm();
       if (e.target === this.elements.confirmModal)    this.hideConfirm();
       if (e.target === this.elements.settingsModal)   this.hideSettings();
       if (e.target === this.elements.tutupShiftModal) this.elements.tutupShiftModal.style.display = 'none';
@@ -1263,7 +1299,7 @@ class ChillPOS {
     // Escape key to close active modal
     window.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
-      if (this.elements.formModal.style.display       === 'flex') this.hideForm();
+      // New Transaction form excluded — only Cancel / X dismisses it.
       if (this.elements.confirmModal.style.display    === 'flex') this.hideConfirm();
       if (this.elements.settingsModal.style.display   === 'flex') this.hideSettings();
       if (this.elements.tutupShiftModal.style.display === 'flex') this.elements.tutupShiftModal.style.display = 'none';
@@ -1524,6 +1560,16 @@ class ChillPOS {
   renderBrandName() {
     const el = document.getElementById('brand-name');
     if (el) el.textContent = this.brandName;
+    this.renderLogo();
+  }
+
+  renderLogo() {
+    // Header shows the business logo: custom (Premium only) if set, else the
+    // default logo.png. Footer logo is the static developer branding.
+    const img = document.getElementById('header-logo');
+    if (!img) return;
+    const custom = !DataStore.isLocal() && DataStore.settings.logoData;
+    img.src = custom || 'logo.png';
   }
 
   renderDashboard() {
@@ -1669,7 +1715,9 @@ class ChillPOS {
     document.getElementById('modal-title').textContent = isEdit
       ? t('editTransactionTitle') : t('newTransactionTitle');
 
-    this.setActiveType(isEdit && transaksi.jenis === 'OUTGOING' ? 'outgoing' : 'income');
+    // New transactions start with no type selected so staff must consciously
+    // pick Income or Outgoing. Edits keep the existing type.
+    this.setActiveType(isEdit ? (transaksi.jenis === 'OUTGOING' ? 'outgoing' : 'income') : null);
 
     // Populate category dropdown — exclude system categories (e.g. START BALANCE
     // is only inserted automatically at shift start, never picked manually).
@@ -1861,6 +1909,18 @@ class ChillPOS {
     // "Upgrade to Cloud" only shows for admin while running in Local mode.
     document.getElementById('open-upgrade-cloud').style.display =
       (DataStore.isLocal() && Auth.can(PERMISSIONS.MANAGE_SETTINGS)) ? '' : 'none';
+    // Logo upload is a Cloud-only feature — Basic (Local) mode keeps the static logo.png.
+    const logoGroup = document.getElementById('settings-logo-group');
+    if (logoGroup) {
+      logoGroup.style.display = DataStore.isLocal() ? 'none' : '';
+      const fileInput = document.getElementById('settings-logo');
+      const preview   = document.getElementById('settings-logo-preview');
+      if (fileInput) fileInput.value = '';
+      if (preview) {
+        if (DataStore.settings.logoData) { preview.src = DataStore.settings.logoData; preview.style.display = 'block'; }
+        else { preview.removeAttribute('src'); preview.style.display = 'none'; }
+      }
+    }
     this.renderCategoriesList();
     this.renderAdminCategoriesList();
     this.renderStaffList();
@@ -1967,6 +2027,16 @@ class ChillPOS {
     DataStore.saveSetting('admin_categories', adminCats).catch(e =>
       console.error('[Settings] admin_categories save failed:', e));
 
+    // Logo upload (Cloud only). Resize + convert to PNG, then persist as base64.
+    const logoFile = !DataStore.isLocal() && document.getElementById('settings-logo')
+      ? document.getElementById('settings-logo').files[0] : null;
+    if (logoFile) {
+      resizeLogoToBase64(logoFile)
+        .then(base64 => DataStore.saveSetting('logo_data', base64))
+        .then(() => this.renderLogo())
+        .catch(e => console.error('[Settings] logo save failed:', e));
+    }
+
     this.renderBrandName();
     this.hideSettings();
     this.showAlert(t('alertSettingsSaved'), 'success');
@@ -1974,7 +2044,8 @@ class ChillPOS {
 
   setActiveType(type) {
     document.querySelectorAll('.type-btn').forEach(btn => btn.classList.remove('active'));
-    document.querySelector(`.type-btn.${type}`).classList.add('active');
+    // type === null leaves both deselected, forcing an explicit choice on new transactions.
+    if (type) document.querySelector(`.type-btn.${type}`).classList.add('active');
   }
 
   // ============================================================

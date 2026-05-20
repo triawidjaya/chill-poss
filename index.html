@@ -19,7 +19,7 @@
 <div class="container">
 
   <header>
-    <h1><img src="logo.png" class="brand-logo" alt="Logo"> <span id="brand-name">My Business</span></h1>
+    <h1><img id="header-logo" src="logo.png" class="brand-logo" alt="Logo"> <span id="brand-name">My Business</span></h1>
     <button class="btn theme-toggle" id="toggle-header" title="Toggle header visibility" aria-label="Toggle header">
       <span class="pepper-icon slashed"><i class="fas fa-pepper-hot"></i></span>
     </button>
@@ -94,6 +94,11 @@
   </div>
 
 </div>
+
+<footer id="app-footer">
+  <img src="logo.png" class="footer-logo" alt="CHILL ART DEV">
+  <div class="footer-copy">&copy; CHILL ART DEV &middot; <a href="mailto:triawidjaya@hotmail.com">triawidjaya@hotmail.com</a></div>
+</footer>
 
 <!-- Supabase Config Error Modal — hydrate failure / wrong config -->
 <div class="modal" id="sb-error-modal">
@@ -587,6 +592,14 @@
     <div class="form-group">
       <label for="settings-brand" data-i18n="brandName">Brand Name</label>
       <input type="text" id="settings-brand" maxlength="50" placeholder="My Business">
+    </div>
+    <div class="form-group" id="settings-logo-group" style="display:none">
+      <label data-i18n="brandLogo">Business Logo</label>
+      <input type="file" id="settings-logo" accept="image/*">
+      <small style="color:var(--gray);font-size:0.75rem;display:block;margin-top:4px" data-i18n="brandLogoHint">
+        Any image accepted, auto-converted to PNG (max 300&times;150px).
+      </small>
+      <img id="settings-logo-preview" alt="Logo preview" style="display:none;max-height:60px;margin-top:8px">
     </div>
     <div class="form-group">
       <label data-i18n="categoriesPerLine">Categories</label>
