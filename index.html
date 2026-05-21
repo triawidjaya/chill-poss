@@ -259,12 +259,20 @@
         <label for="sb-setup-key" data-i18n="supabaseKey">Publishable Key</label>
         <input type="text" id="sb-setup-key" placeholder="sb_publishable_..." autocomplete="off" required>
       </div>
-      <div class="form-actions" style="grid-column:span 1">
-        <button type="submit" class="btn primary" id="sb-setup-submit" style="width:100%;justify-content:center">
+      <div class="form-actions" style="grid-column:span 1;display:flex;gap:8px">
+        <button type="button" class="btn" id="sb-setup-back" style="flex:0 0 auto">
+          <i class="fas fa-arrow-left"></i> <span data-i18n="back">Back</span>
+        </button>
+        <button type="submit" class="btn primary" id="sb-setup-submit" style="flex:1;justify-content:center">
           <i class="fas fa-plug"></i> <span data-i18n="sbSetupConnect">Connect</span>
         </button>
       </div>
     </form>
+    <div style="text-align:center;margin-top:14px;padding-top:14px;border-top:1px solid var(--border-color)">
+      <button type="button" class="link-btn" id="sb-setup-use-basic" data-i18n="noSupabaseUseBasic">
+        No Supabase yet? Use Basic Mode →
+      </button>
+    </div>
   </div>
 </div>
 

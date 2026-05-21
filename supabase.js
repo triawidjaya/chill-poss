@@ -144,6 +144,10 @@ const DataStore = {
     this._mode = mode;
     try { localStorage.setItem(MODE_KEY, JSON.stringify(mode)); } catch {}
   },
+  clearMode() {
+    this._mode = null;
+    try { localStorage.removeItem(MODE_KEY); } catch {}
+  },
   loadMode() {
     try { return JSON.parse(localStorage.getItem(MODE_KEY)); } catch { return null; }
   },

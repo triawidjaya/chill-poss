@@ -356,6 +356,20 @@ class ChillPOS {
     modal.style.display = 'flex';
     setTimeout(() => document.getElementById('sb-setup-url').focus(), 50);
 
+    // Back — clear the saved mode and return to the Basic/Premium choice.
+    document.getElementById('sb-setup-back').onclick = () => {
+      DataStore.clearMode();
+      modal.style.display = 'none';
+      this.showModeChoiceModal();
+    };
+
+    // Shortcut — user has no Supabase, switch straight to Local (Basic) mode.
+    document.getElementById('sb-setup-use-basic').onclick = () => {
+      DataStore.setMode('local');
+      modal.style.display = 'none';
+      this.bootstrap();
+    };
+
     form.onsubmit = async (e) => {
       e.preventDefault();
       const url = document.getElementById('sb-setup-url').value;
