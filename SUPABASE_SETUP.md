@@ -4,11 +4,9 @@ Panduan setup backend Supabase untuk 1 usaha yang menggunakan CHILL POS APP.
 
 **Konsep:** Tiap usaha punya 1 Supabase project sendiri (data 100% terisolasi). Code app sama untuk semua usaha (di GitHub repo kamu).
 
-> **Versi:** 1.1 — disesuaikan dengan CHILL POS APP terbaru:
-> - Per-method shift breakdown (Cash, Card, Transfer, QRIS)
-> - Closing note per shift (wajib jika ada selisih)
-> - Shift duration tracking via `started_at` + `closed_at`
-> - AccessGate adapter pattern untuk PIN reset (siap migrate ke Supabase Auth)
+> **Versi:** 1.2 — Supabase integration sudah live di production.
+> - **v1.2:** Roadmap section diganti dengan status implementasi (Supabase sudah live, bukan future work) + section offline queue untuk transaksi
+> - **v1.1:** Per-method shift breakdown (Cash, Card, Transfer, QRIS), closing note per shift (wajib jika ada selisih), shift duration tracking via `started_at` + `closed_at`, AccessGate adapter pattern untuk PIN reset
 
 ---
 
@@ -420,26 +418,40 @@ Sekarang tinggal buka app POS, isi first-run wizard, dan jalan! Semua device yan
 
 ---
 
-## 🛠️ Roadmap (Untuk Developer)
+## 🛠️ Status Implementasi (Untuk Developer)
 
-Untuk benar-benar bisa pakai Supabase, app POS perlu di-refactor. **Status saat ini:** beberapa adapter pattern sudah disiapkan di Fase 1 supaya migrate jadi lebih cepat.
+Supabase integration **sudah live di production** (per commit `8ae5606` dan rangkaian polish berikutnya). Section ini ringkas apa yang sudah jalan dan apa yang masih open.
 
-### ✅ Sudah disiapkan di Fase 1 (architecture prep)
-- **`AuthStorage` adapter** — wraps localStorage user CRUD; body tinggal di-swap saat migrate
-- **`AccessGate` adapter** — wraps the `APP_ACCESS_CODE` constant; body tinggal di-swap ke RPC atau dihapus (lihat ROADMAP.md Batch 3.5)
-- **PIN reset flow** — pakai access code; flow akan di-replace dengan Supabase Auth email magic link saat migrate
+### ✅ Sudah live di Cloud mode
+1. **First-Run Wizard** — input field Supabase URL + anon key di modal `sb-setup-modal`
+2. **DataStore adapter** (`supabase.js`) — hydrate dari 6 tabel saat boot, mutate cache in-place, fire listener ke UI
+3. **Realtime subscriptions** — channel `pos-realtime` listen ke perubahan `pos_transactions`, `pos_shifts`, `pos_categories`, `pos_users`, `pos_session`, `pos_settings`; auto-rerender saat data berubah dari device lain
+4. **AuthStorage adapter** — `pos_users` CRUD via Supabase di Cloud mode, localStorage di Local mode
+5. **Vendor SDK** — `vendor/supabase.min.js` di-load sebelum `supabase.js`
+6. **Local → Cloud migration** — flow di Settings (`migrateLocalToCloud()`): snapshot data lokal → verify target project kosong → upload users/transactions/shifts/categories/settings → swap mode → reload
+7. **Offline queue** untuk transaksi (per commit `355f0c1`) — lihat section di bawah
+8. **Dual-mode bootstrap** — user pilih Local (Basic) vs Cloud (Premium) di mode-choice modal; bisa pindah Local → Cloud belakangan via Settings
 
-### 🔨 Yang harus diubah saat migrate
-1. **First-Run Wizard**: tambah field Supabase URL + anon key
-2. **`AuthStorage` adapter**: body diganti `await supabase.from('pos_users').select()` dll
-3. **`Storage` service**: dibuatkan `SupabaseStorage` versi yang sync ke tabel `pos_settings`, `pos_transactions`, dll
-4. **Realtime subscriptions**: listen ke perubahan `pos_transactions`, `pos_session`, `pos_shifts`, `pos_settings`, auto-rerender saat data berubah dari device lain
-5. **Vendor Supabase SDK**: download `supabase.min.js` ke `vendor/`
-6. **Offline queue**: kalau internet drop, simpan ke localStorage, sync saat online lagi
-7. **PIN reset → email magic link**: replace AccessGate-based flow dengan Supabase Auth
-8. **Drop atau migrate AccessGate**: per Batch 3.5 di ROADMAP.md — Option A (hapus, pakai Supabase Auth) atau Option B (per-tenant code di `pos_settings`)
+### 🔓 Masih open (Phase 3 candidate)
+- **PIN reset via email magic link** — saat ini masih pakai shared secret `APP_ACCESS_CODE` di `script.js`. `AccessGate` adapter sudah dipasang supaya body tinggal di-swap nanti tanpa ubah caller. Lihat `ROADMAP.md` Batch 3.5 untuk plan migrasi & pertanyaan terbuka (collect email user existing, communication plan, dll).
 
-Estimasi: **2-3 hari kerja** (lihat ROADMAP.md Fase 2 untuk breakdown per batch).
+---
+
+## 🌐 Offline Queue (Cloud mode)
+
+**Apa yang dilakukan:** Kalau koneksi internet drop saat user input transaksi, transaksi disimpan dulu di browser (`localStorage['pos_offline_queue']`) dan auto-flush ke Supabase begitu online kembali.
+
+**Trigger flush:**
+1. Browser fire `online` event (network kembali tersambung)
+2. Realtime channel re-subscribe (Supabase reconnect setelah sleep/disconnect)
+
+**UI feedback:** Banner muncul di atas header — merah saat offline (dengan jumlah queue), biru saat syncing, hidden saat online + queue kosong.
+
+**Scope:** Hanya `insertTransaction` yang di-queue. Edit, delete, close-shift, settings, dan user CRUD tetap throw-on-error (jarang dipakai, dan close-shift multi-table tidak aman untuk di-defer).
+
+**Tidak butuh setup tambahan di sisi Supabase** — purely client-side feature. Schema, RLS, dan publication tidak berubah.
+
+**Recovery dari permanent error:** Jika flush gagal karena bukan network error (RLS denied, constraint violation), item di-log + di-drop supaya tidak infinite-retry. Network error tetap di-queue sampai berhasil.
 
 ---
 
@@ -481,4 +493,4 @@ Shift yang dibuat sebelum v1.1 hanya punya field `cash`, `card`, `other` di summ
 
 Kalau ada pertanyaan setup, kontak [your contact info].
 
-**Versi guide:** 1.1 — disesuaikan dengan CHILL POS APP terbaru (multi-method shifts, closing notes, shift duration tracking, AccessGate-based PIN reset).
+**Versi guide:** 1.2 — Supabase integration live di production, dengan offline queue untuk transaksi. PIN reset masih pakai AccessGate adapter (parked sebagai Phase 3 candidate).
