@@ -272,7 +272,12 @@ const DataStore = {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pos_users'        }, (p) => this._onUserChange(p))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pos_session'      }, (p) => this._onSessionChange(p))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pos_settings'     }, (p) => this._onSettingsChange(p))
-      .subscribe();
+      .subscribe((status) => {
+        // 'SUBSCRIBED' fires on initial connect AND on every reconnect after
+        // network drop / device sleep. Use it as the cue to drain any queued
+        // offline writes that piled up while disconnected.
+        if (status === 'SUBSCRIBED') OfflineQueue.flush();
+      });
   },
 
   _onTxChange(p) {
@@ -356,9 +361,31 @@ const DataStore = {
       this._fire('transactions');
       return;
     }
-    const { error } = await getSupabase().from('pos_transactions').insert([toDbTx(tx)]);
-    if (error) throw error;
-    if (!this.transactions.some(t => t.id === tx.id)) this.transactions.unshift({ ...tx });
+    // Cloud mode: try Supabase first. On network failure, queue the insert
+    // and optimistically update the cache so the UI behaves as if the write
+    // succeeded — the OfflineQueue will flush it when connectivity returns.
+    // The realtime INSERT event that fires post-flush is deduped by id below.
+    try {
+      const { error } = await getSupabase().from('pos_transactions').insert([toDbTx(tx)]);
+      if (error) {
+        if (isNetworkError(error)) {
+          OfflineQueue.enqueue('insertTransaction', tx);
+          if (!this.transactions.some(t => t.id === tx.id)) this.transactions.unshift({ ...tx });
+          this._fire('transactions');
+          return;
+        }
+        throw error;
+      }
+      if (!this.transactions.some(t => t.id === tx.id)) this.transactions.unshift({ ...tx });
+    } catch (e) {
+      if (isNetworkError(e)) {
+        OfflineQueue.enqueue('insertTransaction', tx);
+        if (!this.transactions.some(t => t.id === tx.id)) this.transactions.unshift({ ...tx });
+        this._fire('transactions');
+        return;
+      }
+      throw e;
+    }
   },
 
   async updateTransaction(tx) {
@@ -835,10 +862,130 @@ async function migrateLocalToCloud(url, key) {
   };
 }
 
+// ============================================================
+// OfflineQueue — Cloud-mode-only buffer for transactions that
+// failed to reach Supabase due to connectivity loss.
+//
+// Scope (intentionally minimal): only `insertTransaction` is
+// queued. Edits, deletes, shift-close, settings, and user CRUD
+// keep their original throw-on-error behavior — they're rare
+// enough that a retry-by-user is acceptable, and queueing them
+// would multiply edge cases (close-shift especially is multi-
+// table and not safe to defer).
+//
+// Why opaque permanent-error drop: if a queued insert fails
+// with a non-network error during flush (RLS, constraint, etc.),
+// retrying it on every reconnect would loop forever. We log and
+// discard. Network errors keep the item in the queue.
+// ============================================================
+const OFFLINE_QUEUE_KEY = 'pos_offline_queue';
+
+function isNetworkError(err) {
+  if (!err) return false;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+  const msg = String(err.message || err.msg || err).toLowerCase();
+  if (msg.includes('failed to fetch')) return true;
+  if (msg.includes('networkerror'))    return true;
+  if (msg.includes('load failed'))     return true;   // Safari
+  if (msg.includes('network request')) return true;
+  return err.name === 'TypeError';
+}
+
+const OfflineQueue = {
+  _flushing: false,
+  _listeners: [],
+
+  load() {
+    try { return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY)) || []; }
+    catch { return []; }
+  },
+  _persist(q) {
+    try { localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(q)); }
+    catch (e) { console.error('[OfflineQueue] persist failed:', e); }
+  },
+  size() { return this.load().length; },
+
+  enqueue(op, payload) {
+    const q = this.load();
+    q.push({
+      qid:       (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()),
+      op,
+      payload,
+      createdAt: new Date().toISOString(),
+      retries:   0,
+    });
+    this._persist(q);
+    this._fire();
+  },
+
+  // Flush in order. Stops at the first network error (item stays).
+  // Drops items that fail with permanent errors.
+  async flush() {
+    if (this._flushing) return;
+    if (DataStore.isLocal()) return;            // no-op in local mode
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+
+    this._flushing = true;
+    this._fire();   // UI can show "Syncing..." while we work
+    try {
+      let q = this.load();
+      while (q.length > 0) {
+        const item = q[0];
+        let dropped = false;
+        try {
+          if (item.op === 'insertTransaction') {
+            const { error } = await getSupabase()
+              .from('pos_transactions')
+              .insert([toDbTx(item.payload)]);
+            if (error) {
+              if (isNetworkError(error)) break;   // try again later
+              console.error('[OfflineQueue] permanent error, dropping item:', error, item);
+              dropped = true;
+            }
+          } else {
+            console.warn('[OfflineQueue] unknown op, dropping:', item);
+            dropped = true;
+          }
+        } catch (e) {
+          if (isNetworkError(e)) break;
+          console.error('[OfflineQueue] exception, dropping item:', e, item);
+          dropped = true;
+        }
+        // Successful flush OR permanent drop — both remove from queue.
+        q.shift();
+        this._persist(q);
+        this._fire();
+        if (dropped) continue;
+      }
+    } finally {
+      this._flushing = false;
+      this._fire();
+    }
+  },
+
+  on(cb) { this._listeners.push(cb); },
+  _fire() {
+    this._listeners.forEach(cb => {
+      try { cb({ size: this.size(), flushing: this._flushing, online: navigator.onLine !== false }); }
+      catch (e) { console.error('[OfflineQueue] listener error:', e); }
+    });
+  },
+};
+
+// Auto-flush triggers: browser fires 'online' when connectivity returns.
+// Also opportunistically flush whenever the realtime channel re-opens
+// (Supabase reconnect after sleep/lock); scheduled in subscribeRealtime.
+if (typeof window !== 'undefined') {
+  window.addEventListener('online',  () => OfflineQueue.flush());
+  window.addEventListener('offline', () => OfflineQueue._fire());
+}
+
 // Expose DataStore + SupabaseConfig globally for script.js / history.html
 window.DataStore           = DataStore;
 window.SupabaseConfig      = SupabaseConfig;
 window.getSupabase         = getSupabase;
 window.Storage             = Storage;
 window.AuthStorage         = AuthStorage;
+window.OfflineQueue        = OfflineQueue;
+window.isNetworkError      = isNetworkError;
 window.migrateLocalToCloud = migrateLocalToCloud;

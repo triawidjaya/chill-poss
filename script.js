@@ -304,6 +304,7 @@ class ChillPOS {
     }
     DataStore.setMode(mode);
     this._applyModeBanner();
+    this._bindOfflineQueueBanner();
 
     if (mode === 'cloud' && !SupabaseConfig.load()) {
       this.showSupabaseSetupModal();
@@ -342,6 +343,58 @@ class ChillPOS {
   _applyModeBanner() {
     const banner = document.getElementById('local-mode-banner');
     if (banner) banner.style.display = DataStore.isLocal() ? 'block' : 'none';
+  }
+
+  // One-time wiring: OfflineQueue + browser online/offline events both
+  // trigger the same banner re-render. Idempotent — safe to call repeatedly,
+  // but bootstrap only calls it once per page load.
+  _bindOfflineQueueBanner() {
+    if (this._offlineBannerBound) return;
+    this._offlineBannerBound = true;
+    const rerender = () => this._renderOfflineBanner();
+    if (window.OfflineQueue) OfflineQueue.on((state) => this._renderOfflineBanner(state));
+    window.addEventListener('online',  rerender);
+    window.addEventListener('offline', rerender);
+    this._renderOfflineBanner();
+  }
+
+  // Render the offline / sync-queue banner. Hidden unless we're offline OR
+  // there are queued writes pending. Only meaningful in Cloud mode — local
+  // mode never queues. Bound to OfflineQueue events in bootstrap().
+  _renderOfflineBanner(state) {
+    const el   = document.getElementById('offline-banner');
+    const icon = document.getElementById('offline-banner-icon');
+    const text = document.getElementById('offline-banner-text');
+    if (!el || !icon || !text) return;
+    if (!DataStore.isCloud()) { el.style.display = 'none'; return; }
+
+    const size     = state ? state.size     : (window.OfflineQueue ? OfflineQueue.size() : 0);
+    const flushing = state ? state.flushing : false;
+    const online   = state ? state.online   : (navigator.onLine !== false);
+
+    if (online && size === 0) { el.style.display = 'none'; return; }
+
+    el.style.display = 'block';
+    if (!online && size === 0) {
+      el.style.background  = '#fee2e2';
+      el.style.color       = '#7f1d1d';
+      el.style.borderColor = '#fca5a5';
+      icon.className       = 'fas fa-wifi';
+      text.textContent     = t('offlineBanner');
+    } else if (!online && size > 0) {
+      el.style.background  = '#fee2e2';
+      el.style.color       = '#7f1d1d';
+      el.style.borderColor = '#fca5a5';
+      icon.className       = 'fas fa-cloud-upload-alt';
+      text.textContent     = t('offlineQueued').replace('{n}', String(size));
+    } else {
+      // Online with non-empty queue — flushing or about to.
+      el.style.background  = '#dbeafe';
+      el.style.color       = '#1e3a8a';
+      el.style.borderColor = '#93c5fd';
+      icon.className       = flushing ? 'fas fa-spinner fa-spin' : 'fas fa-cloud-upload-alt';
+      text.textContent     = t('syncingQueued').replace('{n}', String(size));
+    }
   }
 
   // Show the dedicated cloud-pairing modal. On submit: validate, save config,
@@ -1388,6 +1441,7 @@ class ChillPOS {
     // Re-render dynamic parts that contain translated strings
     this.renderDashboard();
     this.renderTransaksiTable();
+    this._renderOfflineBanner();
   }
 
   // ============================================================
