@@ -224,6 +224,14 @@ const STRINGS = {
     adminCategoriesLabel:'Categories that require admin approval',
     adminCategoriesHint:'Cashier must enter an admin PIN to record transactions in checked categories.',
     wrongAdminPin:'Wrong admin PIN. Transaction not saved.',
+    // ── Non-revenue categories ──
+    nonRevenueCategoriesLabel:'Non-Revenue Categories',
+    nonRevenueCategoriesHint:'Checked categories are excluded from revenue totals. Use for cash transfers, employee loans, or opening balance.',
+    revenueBreakdown:'Revenue Breakdown',
+    shiftRevenue:'Revenue',
+    shiftOperatingExpense:'Operating Expense',
+    shiftNetRevenue:'Net Revenue',
+    shiftNonRevenue:'Non-Revenue (Cash Movements)',
     // ── Supabase / cloud sync ──
     sbSetupTitle:'Connect to Cloud',
     sbSetupHint:'Paste your Supabase Project URL and Publishable Key. Same URL + key on every device = shared data.',
@@ -428,6 +436,14 @@ const STRINGS = {
     adminCategoriesLabel:'Kategori yang butuh persetujuan admin',
     adminCategoriesHint:'Kasir harus masukkan PIN admin untuk catat transaksi di kategori yang dicentang.',
     wrongAdminPin:'PIN admin salah. Transaksi tidak disimpan.',
+    // ── Non-revenue categories ──
+    nonRevenueCategoriesLabel:'Kategori Non-Revenue',
+    nonRevenueCategoriesHint:'Kategori yang dicentang tidak dihitung sebagai revenue. Pakai untuk transfer kas, cashbon karyawan, atau saldo awal.',
+    revenueBreakdown:'Rincian Revenue',
+    shiftRevenue:'Revenue',
+    shiftOperatingExpense:'Pengeluaran Operasional',
+    shiftNetRevenue:'Revenue Bersih',
+    shiftNonRevenue:'Non-Revenue (Pergerakan Kas)',
     // ── Supabase / cloud sync ──
     sbSetupTitle:'Hubungkan ke Cloud',
     sbSetupHint:'Paste URL Project Supabase dan Publishable Key. URL + key sama di tiap device = data sharing.',

@@ -784,6 +784,9 @@ class ChillPOS {
         `;
       list.appendChild(row);
     });
+    // Dependent checkbox lists must stay in sync with the master categories list.
+    if (document.getElementById('settings-admin-cats'))      this.renderAdminCategoriesList();
+    if (document.getElementById('settings-nonrevenue-cats')) this.renderNonRevenueCategoriesList();
   }
 
   addCategoryFlow() {
@@ -1775,9 +1778,12 @@ class ChillPOS {
       const row      = document.createElement('tr');
       const date     = new Date(tx.tanggalWaktu);
       const isIncome = tx.jenis === 'INCOME';
+      const badgeClass = this.isNonRevenue(tx.kategori)
+        ? 'nonrevenue-badge'
+        : (isIncome ? 'income-badge' : 'outgoing-badge');
       row.innerHTML = `
         <td>${this.escapeHtml(date.toLocaleString())}</td>
-        <td><span class="${isIncome ? 'income-badge' : 'outgoing-badge'}">${this.escapeHtml(tx.jenis)}</span></td>
+        <td><span class="${badgeClass}">${this.escapeHtml(tx.jenis)}</span></td>
         <td>${this.escapeHtml(tx.kategori)}</td>
         <td>${this.escapeHtml(tx.deskripsi)}</td>
         <td style="color:${isIncome ? 'var(--success)' : 'var(--danger)'};font-weight:500">
@@ -1809,12 +1815,15 @@ class ChillPOS {
     const canDel  = Auth.can(PERMISSIONS.DELETE_TRANSACTION);
     transactions.forEach(tx => {
       const isIncome = tx.jenis === 'INCOME';
+      const badgeClass = this.isNonRevenue(tx.kategori)
+        ? 'nonrevenue-badge'
+        : (isIncome ? 'income-badge' : 'outgoing-badge');
       const card = document.createElement('div');
       card.className = `tx-card ${isIncome ? 'income' : 'outgoing'}`;
       card.innerHTML = `
         <div class="tx-card-header">
           <span class="tx-card-date">${this.escapeHtml(new Date(tx.tanggalWaktu).toLocaleString())}</span>
-          <span class="${isIncome ? 'income-badge' : 'outgoing-badge'}">${this.escapeHtml(tx.jenis)}</span>
+          <span class="${badgeClass}">${this.escapeHtml(tx.jenis)}</span>
         </div>
         <div class="tx-card-meta">${this.escapeHtml(tx.kategori)} &middot; ${this.escapeHtml(tx.metode)}</div>
         <div class="tx-card-desc">${this.escapeHtml(tx.deskripsi)}</div>
@@ -1973,6 +1982,13 @@ class ChillPOS {
       .reduce((sum, tx) => sum + tx.jumlah, 0);
   }
 
+  // Categories flagged in Settings as cash movements (transfer, receivable, opening
+  // balance) — excluded from revenue/expense totals but still affect cash drawer balance.
+  isNonRevenue(kategori) {
+    const list = DataStore.settings.nonRevenueCategories || [];
+    return list.includes(kategori);
+  }
+
   updateDownloadButton() {
     this.elements.downloadExcelBtn.disabled = this.transactions.length === 0;
   }
@@ -2046,6 +2062,7 @@ class ChillPOS {
     }
     this.renderCategoriesList();
     this.renderAdminCategoriesList();
+    this.renderNonRevenueCategoriesList();
     this.renderStaffList();
     this.elements.settingsBrand.value = this.brandName;
     this.elements.settingsModal.style.display = 'flex';
@@ -2064,6 +2081,25 @@ class ChillPOS {
       row.innerHTML = `
         <input type="checkbox" class="admin-cat-toggle" value="${this.escapeHtml(cat)}"
                ${checked.has(cat) ? 'checked' : ''} style="margin-right:8px;width:16px;height:16px;cursor:pointer;accent-color:#f59e0b">
+        <span class="cat-name">${this.escapeHtml(cat)}</span>
+      `;
+      list.appendChild(row);
+    });
+  }
+
+  // Render checkboxes for each category (including system). Checked = treated as
+  // cash movement / receivable / opening balance — excluded from revenue totals.
+  renderNonRevenueCategoriesList() {
+    const list = document.getElementById('settings-nonrevenue-cats');
+    list.innerHTML = '';
+    const checked = new Set(DataStore.settings.nonRevenueCategories || []);
+    this.categories.forEach(cat => {
+      const row = document.createElement('label');
+      row.className = 'cat-row';
+      row.style.cursor = 'pointer';
+      row.innerHTML = `
+        <input type="checkbox" class="nonrevenue-cat-toggle" value="${this.escapeHtml(cat)}"
+               ${checked.has(cat) ? 'checked' : ''} style="margin-right:8px;width:16px;height:16px;cursor:pointer;accent-color:#6b7280">
         <span class="cat-name">${this.escapeHtml(cat)}</span>
       `;
       list.appendChild(row);
@@ -2145,14 +2181,22 @@ class ChillPOS {
     // Defensive: ensure system categories present
     SYSTEM_CATEGORIES.forEach(c => { if (!this.categories.includes(c)) this.categories.unshift(c); });
     this.brandName = brand || DEFAULT_BRAND;
+
+    // Capture checkbox state BEFORE any Storage.set call. Storage.set fires a
+    // categories listener that re-renders the dependent checkbox lists, which
+    // would otherwise wipe the user's selections from the DOM before we read them.
+    const adminCats = [...document.querySelectorAll('.admin-cat-toggle:checked')]
+      .map(el => el.value);
+    const nonRevenueCats = [...document.querySelectorAll('.nonrevenue-cat-toggle:checked')]
+      .map(el => el.value);
+
     Storage.set('pos_brand',      this.brandName);
     Storage.set('pos_categories', this.categories);
 
-    // Collect checked admin-required categories and persist as a settings row.
-    const adminCats = [...document.querySelectorAll('.admin-cat-toggle:checked')]
-      .map(el => el.value);
     DataStore.saveSetting('admin_categories', adminCats).catch(e =>
       console.error('[Settings] admin_categories save failed:', e));
+    DataStore.saveSetting('non_revenue_categories', nonRevenueCats).catch(e =>
+      console.error('[Settings] non_revenue_categories save failed:', e));
 
     // Logo upload (Cloud only). Resize + convert to PNG, then persist as base64.
     const logoFile = !DataStore.isLocal() && document.getElementById('settings-logo')
@@ -2363,9 +2407,46 @@ class ChillPOS {
     const noteHintClass = hasSelisih ? 'note-hint required' : 'note-hint';
     const noteHintText  = hasSelisih ? t('closingNoteRequired') : t('closingNoteOptional');
 
+    // Revenue breakdown — split raw income/outgoing into business revenue vs cash movements.
+    const totalNonRevenueIn  = this.transactions.filter(tx => tx.jenis === 'INCOME'   &&  this.isNonRevenue(tx.kategori)).reduce((s, tx) => s + tx.jumlah, 0);
+    const totalNonRevenueOut = this.transactions.filter(tx => tx.jenis === 'OUTGOING' &&  this.isNonRevenue(tx.kategori)).reduce((s, tx) => s + tx.jumlah, 0);
+    const totalIncomeAll     = this.transactions.filter(tx => tx.jenis === 'INCOME'  ).reduce((s, tx) => s + tx.jumlah, 0);
+    const totalOutgoingAll   = this.transactions.filter(tx => tx.jenis === 'OUTGOING').reduce((s, tx) => s + tx.jumlah, 0);
+    const revenue            = totalIncomeAll   - totalNonRevenueIn;
+    const operatingExpense   = totalOutgoingAll - totalNonRevenueOut; // negative
+    const netRevenue         = revenue + operatingExpense;
+    const hasNonRevenue      = totalNonRevenueIn !== 0 || totalNonRevenueOut !== 0;
+    const nonRevenueNet      = totalNonRevenueIn + totalNonRevenueOut;
+
+    const breakdownRow = (label, value, cls = '') => `
+      <tr class="${cls}">
+        <td>${label}</td>
+        <td style="text-align:right;font-weight:500">${this.formatCurrency(value)}</td>
+      </tr>`;
+
+    const revenueBreakdownSection = `
+      <div class="ts-table-wrap" style="margin-bottom:12px">
+        <table class="ts-summary-table">
+          <thead>
+            <tr><th colspan="2">${t('revenueBreakdown')}</th></tr>
+          </thead>
+          <tbody>
+            ${breakdownRow(t('shiftRevenue'),          revenue)}
+            ${breakdownRow(t('shiftOperatingExpense'), operatingExpense)}
+            ${breakdownRow(`<strong>${t('shiftNetRevenue')}</strong>`, netRevenue, 'ts-net-row')}
+            ${hasNonRevenue ? breakdownRow(
+              `<span style="color:#9a3412">${t('shiftNonRevenue')}</span>`,
+              nonRevenueNet,
+              'ts-nonrev-row'
+            ) : ''}
+          </tbody>
+        </table>
+      </div>`;
+
     this.elements.tsSummaryContent.innerHTML = `
       <div class="shift-summary">
         <h4>${t('shiftSummary')}</h4>
+        ${revenueBreakdownSection}
         <div class="ts-table-wrap">
           <table class="ts-summary-table">
             <thead>
@@ -2462,6 +2543,16 @@ class ChillPOS {
     // startedAt sourced from the START BALANCE tx — it's always inserted at shift start.
     const startedAt = this.transactions.find(tx => tx.kategori === 'START BALANCE')?.tanggalWaktu ?? null;
 
+    // Revenue breakdown — splits raw INCOME/OUTGOING into business revenue vs
+    // non-revenue (transfers, receivables, opening balance). totalIncome/totalOutgoing
+    // are kept for backward compat with shifts closed before this feature shipped.
+    const totalIncome      = this.transactions.filter(tx => tx.jenis === 'INCOME').reduce((s, tx) => s + tx.jumlah, 0);
+    const totalOutgoing    = this.transactions.filter(tx => tx.jenis === 'OUTGOING').reduce((s, tx) => s + tx.jumlah, 0);
+    const totalNonRevenueIn  = this.transactions.filter(tx => tx.jenis === 'INCOME'   &&  this.isNonRevenue(tx.kategori)).reduce((s, tx) => s + tx.jumlah, 0);
+    const totalNonRevenueOut = this.transactions.filter(tx => tx.jenis === 'OUTGOING' &&  this.isNonRevenue(tx.kategori)).reduce((s, tx) => s + tx.jumlah, 0);
+    const totalRevenue          = totalIncome   - totalNonRevenueIn;
+    const totalOperatingExpense = totalOutgoing - totalNonRevenueOut;
+
     const shiftRecord = {
       id:        `shift_${Date.now()}`,
       startedAt,
@@ -2470,8 +2561,12 @@ class ChillPOS {
       summary: {
         cash, card, transfer, qris,
         total:            cash + card + transfer + qris,
-        totalIncome:      this.transactions.filter(tx => tx.jenis === 'INCOME').reduce((s, tx) => s + tx.jumlah, 0),
-        totalOutgoing:    this.transactions.filter(tx => tx.jenis === 'OUTGOING').reduce((s, tx) => s + tx.jumlah, 0),
+        totalIncome,
+        totalOutgoing,
+        totalRevenue,
+        totalOperatingExpense,
+        totalNonRevenueIn,
+        totalNonRevenueOut,
         jumlahTransaksi:  this.transactions.length,
         actualCash:      this._actualForHistory?.actualCash      ?? null,
         actualCard:      this._actualForHistory?.actualCard      ?? null,

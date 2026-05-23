@@ -246,6 +246,7 @@ tr:hover { background-color: rgba(0,0,0,0.05); }
 
 .income-badge  { background-color: #d1fae5; color: #065f46; padding: 2px 6px; border-radius: 10px; font-size: 0.75rem; font-weight: 500; }
 .outgoing-badge { background-color: #fee2e2; color: #b91c1c; padding: 2px 6px; border-radius: 10px; font-size: 0.75rem; font-weight: 500; }
+.nonrevenue-badge { background-color: #fed7aa; color: #9a3412; padding: 2px 6px; border-radius: 10px; font-size: 0.75rem; font-weight: 500; }
 
 .actions-cell { display: flex; gap: 5px; }
 

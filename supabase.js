@@ -164,6 +164,7 @@ const DataStore = {
     lang:            'en',
     shiftActive:     false,
     adminCategories: [],   // category names that require admin PIN to record
+    nonRevenueCategories: [], // category names excluded from revenue/expense totals (transfer, receivable, opening balance)
     logoData:        null, // base64 PNG of custom logo (cloud only); null = use static logo.png
   },
 
@@ -193,6 +194,7 @@ const DataStore = {
     this.settings.lang            = 'en';
     this.settings.shiftActive     = false;
     this.settings.adminCategories = [];
+    this.settings.nonRevenueCategories = [];
     this.settings.logoData        = null;
     this.hydrated = false;
   },
@@ -216,6 +218,7 @@ const DataStore = {
     this.settings.lang            = _lsGet('pos_lang',              'en');
     this.settings.shiftActive     = _lsGet('pos_shift_active',      false);
     this.settings.adminCategories = _lsGet('pos_admin_categories',  []);
+    this.settings.nonRevenueCategories = _lsGet('pos_non_revenue_categories', []);
     this.settings.logoData        = _lsGet('pos_logo_data',         null);
     this.hydrated = true;
   },
@@ -256,6 +259,7 @@ const DataStore = {
     this.settings.lang            = map.lang             ?? 'en';
     this.settings.shiftActive     = map.shift_active     ?? false;
     this.settings.adminCategories = map.admin_categories ?? [];
+    this.settings.nonRevenueCategories = map.non_revenue_categories ?? [];
     this.settings.logoData        = map.logo_data        ?? null;
 
     this.hydrated = true;
@@ -349,6 +353,7 @@ const DataStore = {
     else if (key === 'lang')             this.settings.lang            = value;
     else if (key === 'shift_active')     this.settings.shiftActive     = value;
     else if (key === 'admin_categories') this.settings.adminCategories = value;
+    else if (key === 'non_revenue_categories') this.settings.nonRevenueCategories = value;
     else if (key === 'logo_data')        this.settings.logoData        = value;
     this._fire('settings');
   },
@@ -609,6 +614,7 @@ const DataStore = {
       else if (key === 'lang')             { this.settings.lang            = value; _lsSet('pos_lang',              value); }
       else if (key === 'shift_active')     { this.settings.shiftActive     = value; _lsSet('pos_shift_active',      value); }
       else if (key === 'admin_categories') { this.settings.adminCategories = value; _lsSet('pos_admin_categories',  value); }
+      else if (key === 'non_revenue_categories') { this.settings.nonRevenueCategories = value; _lsSet('pos_non_revenue_categories', value); }
       else if (key === 'logo_data')        { this.settings.logoData       = value; _lsSet('pos_logo_data',         value); }
       this._fire('settings');
       return;
@@ -619,6 +625,7 @@ const DataStore = {
     else if (key === 'lang')             this.settings.lang            = value;
     else if (key === 'shift_active')     this.settings.shiftActive     = value;
     else if (key === 'admin_categories') this.settings.adminCategories = value;
+    else if (key === 'non_revenue_categories') this.settings.nonRevenueCategories = value;
     else if (key === 'logo_data')        this.settings.logoData        = value;
   },
 };
@@ -642,6 +649,7 @@ const LOCAL_ONLY_KEYS = new Set([
   'pos_migrated_v1',
   'pos_session',          // per-device session — see AuthStorage below
   'pos_admin_categories', // local-mode mirror of settings.admin_categories
+  'pos_non_revenue_categories', // local-mode mirror of settings.non_revenue_categories
   SB_CONFIG_KEY,
 ]);
 

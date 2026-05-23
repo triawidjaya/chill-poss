@@ -476,12 +476,16 @@ function renderDetail(shift) {
         <strong>${t('closingNote')}:</strong> ${escapeHtml(s.closingNote)}
       </div>` : ''}` : '';
 
+  const nonRevenueSet = new Set(DataStore.settings.nonRevenueCategories || []);
   const rows = (shift.transactions || []).map(tx => {
     const isIncome = tx.jenis === 'INCOME';
+    const badgeClass = nonRevenueSet.has(tx.kategori)
+      ? 'nonrevenue-badge'
+      : (isIncome ? 'income-badge' : 'outgoing-badge');
     return `
       <tr>
         <td>${escapeHtml(new Date(tx.tanggalWaktu).toLocaleString(LangManager.current === 'id' ? 'id-ID' : 'en-US'))}</td>
-        <td><span class="${isIncome ? 'income-badge' : 'outgoing-badge'}">${escapeHtml(tx.jenis)}</span></td>
+        <td><span class="${badgeClass}">${escapeHtml(tx.jenis)}</span></td>
         <td>${escapeHtml(tx.kategori)}</td>
         <td>${escapeHtml(tx.deskripsi)}</td>
         <td style="color:${isIncome ? 'var(--success)' : 'var(--danger)'};font-weight:500">
@@ -509,8 +513,35 @@ function renderDetail(shift) {
         <div class="detail-saldo-amount">${fmt(s.other||0)}</div>
       </div>`;
 
+  // Revenue breakdown — only shown for shifts closed after this feature shipped.
+  // Old shifts (missing totalRevenue field) skip this section gracefully.
+  const hasRevenueBreakdown = s.totalRevenue !== undefined;
+  const nonRevenueNet = (s.totalNonRevenueIn || 0) + (s.totalNonRevenueOut || 0);
+  const hasNonRev     = nonRevenueNet !== 0;
+  const revenueBreakdownSection = hasRevenueBreakdown ? `
+    <div class="detail-summary" style="margin-bottom:14px">
+      <div class="detail-saldo-item" style="background:rgba(16,185,129,0.10)">
+        <div class="detail-saldo-label">${t('shiftRevenue')}</div>
+        <div class="detail-saldo-amount" style="color:#065f46">${fmt(s.totalRevenue || 0)}</div>
+      </div>
+      <div class="detail-saldo-item" style="background:rgba(239,68,68,0.10)">
+        <div class="detail-saldo-label">${t('shiftOperatingExpense')}</div>
+        <div class="detail-saldo-amount" style="color:#b91c1c">${fmt(s.totalOperatingExpense || 0)}</div>
+      </div>
+      <div class="detail-saldo-item total-item">
+        <div class="detail-saldo-label">${t('shiftNetRevenue')}</div>
+        <div class="detail-saldo-amount">${fmt((s.totalRevenue || 0) + (s.totalOperatingExpense || 0))}</div>
+      </div>
+      ${hasNonRev ? `
+        <div class="detail-saldo-item" style="background:rgba(249,115,22,0.12)">
+          <div class="detail-saldo-label" style="color:#9a3412">${t('shiftNonRevenue')}</div>
+          <div class="detail-saldo-amount" style="color:#9a3412">${fmt(nonRevenueNet)}</div>
+        </div>` : ''}
+    </div>` : '';
+
   return `
     ${durationBanner}
+    ${revenueBreakdownSection}
     <div class="detail-summary">
       <div class="detail-saldo-item">
         <div class="detail-saldo-label">${t('cashExpected')}</div>
