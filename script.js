@@ -76,8 +76,10 @@ function resizeLogoToBase64(file, maxW = 300, maxH = 150) {
 }
 
 // Access gate — change this code to restrict who can use the app
-const APP_ACCESS_CODE    = 'smallbutspicy';
-const STORAGE_KEY_ACCESS = 'pos_access_granted';
+const APP_ACCESS_CODE       = 'smallbutspicy_v2';
+const APP_CODE_VERSION      = 2;  // Increment this when changing APP_ACCESS_CODE
+const STORAGE_KEY_ACCESS    = 'pos_access_granted';
+const STORAGE_KEY_CODE_VER  = 'pos_code_version';
 
 // AccessGate adapter — designed for Opsi 2 migration to Supabase.
 // Currently compares to a hardcoded constant. When migrating, swap the body
@@ -86,7 +88,14 @@ const STORAGE_KEY_ACCESS = 'pos_access_granted';
 // See ROADMAP.md > Fase 2 > Batch 3.5 for the migration plan.
 const AccessGate = {
   async verify(code) {
-    return code === APP_ACCESS_CODE;
+    if (code === APP_ACCESS_CODE) {
+      Storage.set(STORAGE_KEY_CODE_VER, APP_CODE_VERSION);
+      return true;
+    }
+    return false;
+  },
+  isCodeVersionValid() {
+    return Storage.get(STORAGE_KEY_CODE_VER, 0) === APP_CODE_VERSION;
   },
 };
 // Categories required by app logic — cannot be deleted via UI
@@ -292,7 +301,7 @@ class ChillPOS {
   // ============================================================
 
   async bootstrap() {
-    if (!Storage.get(STORAGE_KEY_ACCESS, false)) {
+    if (!Storage.get(STORAGE_KEY_ACCESS, false) || !AccessGate.isCodeVersionValid()) {
       this.showAccessGate();
       return;
     }
@@ -523,7 +532,7 @@ class ChillPOS {
   // ============================================================
 
   async bootstrapAuth() {
-    if (!Storage.get(STORAGE_KEY_ACCESS, false)) {
+    if (!Storage.get(STORAGE_KEY_ACCESS, false) || !AccessGate.isCodeVersionValid()) {
       this.showAccessGate();
       return;
     }
